@@ -1,6 +1,6 @@
 ### hi, I'm Austen
 
-I design and build digital products, brands, and the occasional company.
+I'm a builder.. software, furniture, vehicles, products.
 
 **Currently:**
 - Building things at @hoverinc.
