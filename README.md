@@ -4,11 +4,12 @@ I design and build digital products, brands, and the occasional company.
 
 **Currently:**
 - Building things at @hoverinc.
-- Tinkering on **Ripley**.. a real-time perception stack for my truck.
+- Building the real-time perception stack for **Ripley**.. my overland vehicle.
 
 **Past projects:**
 - **[retold](https://austendewolf.com/projects/retold)** · live audio platform for scheduled talks
 - **[flatly](https://austendewolf.com/projects/flatly)** · property management for landlords and small operators
 - **[tiptapp](https://austendewolf.com/projects/tiptapp)** · digital tipping for service businesses
 
-**More at [austendewolf.com](https://austendewolf.com)** · [LinkedIn](https://www.linkedin.com/in/austendewolf/)
+**Find me elsewhere:**
+[austendewolf.com](https://austendewolf.com) · [LinkedIn](https://www.linkedin.com/in/austendewolf/) · [Instagram](https://www.instagram.com/austendewolf) · [npm](https://www.npmjs.com/~deausten)
