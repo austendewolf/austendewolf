@@ -1,6 +1,6 @@
 ### hello, I'm Austen 👋🏾
 
-I'm an engineer and a builder. I've spent the last decade shipping software products, from messy first prototypes through scale; the last few years, that's meant running engineering teams at @hoverinc. Off the screen, I build the things that don't fit there.. an overland vehicle (Ripley), furniture, the occasional company. The thread is products. I like making them, and I like working with people who make them.
+Engineer, builder. I've spent the last decade shipping software, scrappy first prototypes through scale, and the last few years running engineering teams at @hoverinc. Off the screen, I build the things that don't fit there.. an overland truck (Ripley), furniture, the occasional company. They're all products in the end. I like making them, and I like working with the people who make them.
 
 **Past projects:**
 - **[retold](https://austendewolf.com/projects/retold)** · live audio platform for scheduled talks
