@@ -9,5 +9,13 @@
     "lint": "pnpm --filter web lint",
     "migrate": "pnpm --filter web migrate",
     "db:generate": "pnpm --filter @awd/db generate"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "msw",
+      "sharp",
+      "unrs-resolver"
+    ]
   }
 }
