@@ -3,7 +3,7 @@
 Engineer, builder. I've spent the last decade shipping software, scrappy first prototypes through scale, and the last few years running engineering teams at @hoverinc. Off the screen, I build the things that don't fit there.. an overland truck (Ripley), furniture, the occasional company. They're all products in the end. I like making them, and I like working with the people who make them.
 
 **Projects:**
-- **[The Standard Reasoning Company](https://standardreasoning.com)**
+- **[The Standard Reasoning Company](https://standardreasoningcompany.com)**
 - **[praetom](https://praetom.com)** · production intelligence for AI-generated code
 - **[cofoundri](https://cofoundri.com)** · operational infrastructure for the next million companies
 - **[retold](https://austendewolf.com/projects/retold)** · live audio platform for scheduled talks
