@@ -2,7 +2,10 @@
 const config = {
   output: "standalone",
   reactStrictMode: true,
-  experimental: { instrumentationHook: true },
+  experimental: {
+    instrumentationHook: true,
+    serverComponentsExternalPackages: ["praetom"],
+  },
 };
 
 export default config;
