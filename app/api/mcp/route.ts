@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSql } from "@/lib/db";
-import { PROGRAM } from "@/app/program";
-import { SCHEDULE, workoutId, parseWorkoutId } from "@/app/week-schedule";
+import { workoutId, parseWorkoutId } from "@/app/week-schedule";
+import { loadProgram, loadSchedule } from "@/lib/program";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -100,11 +100,13 @@ function summarize(data: WorkoutData | null) {
 
 async function handleToolCall(name: string, args: any) {
   if (name === "list_program") {
-    return { content: [{ type: "text", text: JSON.stringify({ days: PROGRAM }, null, 2) }] };
+    const program = await loadProgram();
+    return { content: [{ type: "text", text: JSON.stringify({ days: program }, null, 2) }] };
   }
 
   if (name === "list_weeks") {
-    return { content: [{ type: "text", text: JSON.stringify({ weeks: SCHEDULE }, null, 2) }] };
+    const schedule = await loadSchedule();
+    return { content: [{ type: "text", text: JSON.stringify({ weeks: schedule }, null, 2) }] };
   }
 
   if (name === "get_workout") {
@@ -115,7 +117,8 @@ async function handleToolCall(name: string, args: any) {
     const rows = await sql<{ data: unknown; updated_at: Date }[]>`
       SELECT data, updated_at FROM workouts WHERE id = ${id} LIMIT 1
     `;
-    const template = parsed ? PROGRAM.find((d) => d.id === parsed.dayId) : null;
+    const program = await loadProgram();
+    const template = parsed ? program.find((d) => d.id === parsed.dayId) : null;
     const payload = {
       id,
       date: parsed?.date ?? null,
@@ -132,8 +135,10 @@ async function handleToolCall(name: string, args: any) {
   if (name === "get_week_summary") {
     const startDate = typeof args?.start_date === "string" ? args.start_date : "";
     if (!startDate) throw new Error("start_date required");
-    const week = SCHEDULE.find((w) => w.startDate === startDate);
+    const schedule = await loadSchedule();
+    const week = schedule.find((w) => w.startDate === startDate);
     if (!week) throw new Error(`No scheduled week starting ${startDate}`);
+    const program = await loadProgram();
     const sql = getSql();
     const ids = week.days.map((d) => workoutId(d.date, d.dayId));
     const rows = await sql<{ id: string; data: unknown; updated_at: Date }[]>`
@@ -143,15 +148,15 @@ async function handleToolCall(name: string, args: any) {
     const days = week.days.map((d) => {
       const id = workoutId(d.date, d.dayId);
       const row = byId.get(id);
-      const template = PROGRAM.find((p) => p.id === d.dayId)!;
+      const template = program.find((p) => p.id === d.dayId);
       const actual = (row?.data ?? null) as WorkoutData | null;
       return {
         id,
         date: d.date,
         day_id: d.dayId,
-        day_name: template.name,
-        subtitle: template.subtitle,
-        target: template.exercises,
+        day_name: template?.name ?? d.dayId,
+        subtitle: template?.subtitle ?? "",
+        target: template?.exercises ?? [],
         actual: actual ?? {},
         summary: summarize(actual),
         updated_at: row?.updated_at ?? null,
