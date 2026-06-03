@@ -48,6 +48,20 @@ async function main() {
   } finally {
     await sql.end({ timeout: 5 });
   }
+
+  // After schema migrations land, run the catalog seed in the same
+  // process so Railway's preDeployCommand only has to invoke one entry
+  // point. (Empirically, chaining `node a && node b` in
+  // preDeployCommand silently stops after `node a` — Railway doesn't
+  // run it through a shell that honors `&&`.)
+  const { spawnSync } = require("node:child_process");
+  const seed = spawnSync("node", [path.join(__dirname, "seed-catalog.mjs")], {
+    stdio: "inherit",
+  });
+  if (seed.status !== 0) {
+    console.error(`seed-catalog.mjs exited with code ${seed.status}`);
+    process.exit(seed.status ?? 1);
+  }
 }
 
 main().catch((err) => {
