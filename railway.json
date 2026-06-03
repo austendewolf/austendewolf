@@ -6,7 +6,7 @@
   },
   "deploy": {
     "startCommand": "node server.js",
-    "preDeployCommand": ["node scripts/migrate.js", "node scripts/seed-catalog.mjs"],
+    "preDeployCommand": "node scripts/migrate.js && node scripts/seed-catalog.mjs",
     "healthcheckPath": "/api/health",
     "healthcheckTimeout": 30,
     "restartPolicyType": "ON_FAILURE",
