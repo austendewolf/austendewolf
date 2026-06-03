@@ -6,3 +6,9 @@ node_modules/
 *.log
 .railway/
 .vercel/
+
+# Build-time-generated catalog seed payloads (Dockerfile builder writes
+# these from the TypeScript source so the runner image can seed without
+# shipping the .ts files).
+scripts/seed.program.json
+scripts/seed.schedule.json

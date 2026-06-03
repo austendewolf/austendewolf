@@ -18,6 +18,13 @@ ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 RUN npm run build
 
+# Pre-extract the seed catalog as JSON so the runner image doesn't need
+# the TypeScript source. The seed script reads these at deploy time.
+RUN node --experimental-strip-types -e \
+  "import('./app/program.ts').then(m=>require('node:fs').writeFileSync('scripts/seed.program.json', JSON.stringify(m.PROGRAM)))" \
+ && node --experimental-strip-types -e \
+  "import('./app/week-schedule.ts').then(m=>require('node:fs').writeFileSync('scripts/seed.schedule.json', JSON.stringify(m.SCHEDULE)))"
+
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
