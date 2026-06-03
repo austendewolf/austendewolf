@@ -59,7 +59,7 @@ export async function loadProgram(userId: string = BOOTSTRAP_USER_ID): Promise<D
     SELECT
       e.day_id,
       e.slug,
-      COALESCE(ueo.name, e.name) AS name,
+      e.name,
       COALESCE(ueo.sets, e.sets)::int AS sets,
       COALESCE(ueo.target_reps, e.target_reps)::int AS target_reps,
       COALESCE(ueo.target_weight, e.target_weight) AS target_weight,
