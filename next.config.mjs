@@ -2,6 +2,7 @@
 const config = {
   output: "standalone",
   reactStrictMode: true,
+  experimental: { instrumentationHook: true },
 };
 
 export default config;
