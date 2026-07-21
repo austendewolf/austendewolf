@@ -16,6 +16,23 @@ const config = {
   // undefined" on every request. The Node-side instrumentation in
   // instrumentation.ts still runs unaffected. Re-enable the webpack
   // plugin after upstream fixes the wrapper.)
+  async headers() {
+    return [
+      {
+        // /embed/* routes can be framed by claude.ai. Everything else
+        // stays same-origin only (Next's default is unset; browsers treat
+        // that as permissive, so we don't lock the rest of the app down
+        // here — do it later if needed).
+        source: "/embed/:path*",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: "frame-ancestors 'self' https://claude.ai https://*.claude.ai https://anthropic.com https://*.anthropic.com",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default config;

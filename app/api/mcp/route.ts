@@ -66,7 +66,23 @@ const TOOLS = [
       "Returns every saved workout row across all weeks, ordered most-recent first. Useful for full history or finding orphan/legacy rows.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
+  {
+    name: "render_week",
+    description:
+      "Renders the current (or nearest) scheduled week as an inline interactive HTML view. Returns an embedUrl the caller (or client) can iframe. Use this when the user wants to SEE their week, not read JSON.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
 ];
+
+// Public base URL for the deployed app. RAILWAY_PUBLIC_DOMAIN is
+// injected by Railway; fall back to the custom domain in prod, and to
+// localhost for local dev.
+function publicBaseUrl(): string {
+  const domain = process.env.RAILWAY_PUBLIC_DOMAIN;
+  if (domain) return `https://${domain}`;
+  if (process.env.NODE_ENV === "production") return "https://workout.austendewolf.com";
+  return "http://localhost:3000";
+}
 
 function jsonRpcResult(id: number | string | null, result: unknown) {
   return NextResponse.json({ jsonrpc: "2.0", id, result });
@@ -194,6 +210,31 @@ async function handleToolCall(name: string, args: any) {
       SELECT id, data, updated_at FROM workouts ORDER BY updated_at DESC
     `;
     return { content: [{ type: "text", text: JSON.stringify({ workouts: rows }, null, 2) }] };
+  }
+
+  if (name === "render_week") {
+    const url = `${publicBaseUrl()}/embed/week`;
+    // MCP UI Resources: return an embedded HTML resource that clients
+    // (e.g. Claude mobile/desktop) render inline in the chat. The iframe
+    // points at the app's /embed/week route, which handles auth + data
+    // + theme itself. CSP frame-ancestors on that route allows claude.ai.
+    const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;padding:0;background:transparent;height:100%}iframe{width:100%;height:100vh;border:0;display:block}</style></head><body><iframe src="${url}" title="Week of workouts" loading="eager"></iframe></body></html>`;
+    return {
+      content: [
+        {
+          type: "resource",
+          resource: {
+            uri: `ui://workout-logger/week/${Date.now()}`,
+            mimeType: "text/html",
+            text: html,
+          },
+        },
+        {
+          type: "text",
+          text: JSON.stringify({ embedUrl: url, note: "Iframe the embedUrl to render inline." }),
+        },
+      ],
+    };
   }
 
   throw new Error(`Unknown tool: ${name}`);
