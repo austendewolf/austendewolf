@@ -9,7 +9,10 @@ const NAV_ITEMS: { href: string; label: string }[] = [
 
 export function Navbar() {
   return (
-    <header className="sticky top-0 z-40 w-full backdrop-blur-md bg-background/70 border-b border-border/40">
+    // No background at all: the sheet runs unbroken from the top of the page,
+    // and only a hairline separates the running head from the body. Not sticky,
+    // because a transparent header cannot have content scrolling under it.
+    <header className="w-full border-b border-border/40">
       <nav className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
         <Link
           href="/"

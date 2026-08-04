@@ -53,7 +53,9 @@
   --card-foreground: #ccd5f5;
   --popover: #11161d;
   --popover-foreground: #ccd5f5;
-  --primary: #64ffda;
+  /* Buttons are white. The teal stays the accent for links, marks, and focus,
+     so it still carries identity without every button shouting it. */
+  --primary: #ffffff;
   --primary-foreground: #0a0e14;
   --secondary: #1a2030;
   --secondary-foreground: #ccd5f5;
@@ -76,6 +78,50 @@
   --sidebar-ring: #64ffda;
 }
 
+/*
+ * Paper — an art-book surface.
+ *
+ * A warm off-white rather than white, because paper is never #fff, and ink
+ * that is warm near-black rather than pure black. Texture is procedural: two
+ * layers of SVG fractal noise, a fine grain for tooth and a much coarser one
+ * for the mottle that makes a sheet read as a sheet. No image assets, so it
+ * stays crisp at any pixel density.
+ */
+.paper {
+  /* Cold-press cotton rag: near-white and neutral, not cream. */
+  --background: #f3f2ef;
+  --foreground: #191817;
+  --card: #eeedea;
+  --card-foreground: #191817;
+  --popover: #eeedea;
+  --popover-foreground: #191817;
+  /* Ink, so a button reads as pressed onto the page rather than lit up. */
+  --primary: #191817;
+  --primary-foreground: #f3f2ef;
+  --secondary: #e6e5e1;
+  --secondary-foreground: #191817;
+  --muted: #e6e5e1;
+  --muted-foreground: #6a6862;
+  /* A single red, the way a plate caption or a printer's mark sits on a page. */
+  --accent: #9c3d2c;
+  --accent-foreground: #f3f2ef;
+  --destructive: #a8322a;
+  --border: rgb(25 24 23 / 0.16);
+  --input: rgb(25 24 23 / 0.22);
+  --ring: rgb(25 24 23 / 0.35);
+  --radius: 0.125rem;
+  --sidebar: #eeedea;
+  --sidebar-foreground: #191817;
+  --sidebar-primary: #191817;
+  --sidebar-primary-foreground: #f3f2ef;
+  --sidebar-accent: #e6e5e1;
+  --sidebar-accent-foreground: #191817;
+  --sidebar-border: rgb(25 24 23 / 0.16);
+  --sidebar-ring: rgb(25 24 23 / 0.35);
+  /* Where the twin margin rule falls, measured from the left edge of the sheet. */
+  --sheet-margin: 4rem;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -84,25 +130,194 @@
     @apply font-sans;
     color-scheme: dark;
   }
+  html.paper {
+    color-scheme: light;
+  }
+  /*
+   * The sheet: cold-press watercolour tooth.
+   *
+   * Three layers. The tooth is turbulence stretched on one axis so the grain
+   * runs diagonally rather than reading as even TV static, which is what makes
+   * it look like pressed fibre. Above it a coarse mottle gives the sheet its
+   * unevenness, and a soft highlight keeps the peaks bright so the surface
+   * reads as raised rather than dirty.
+   *
+   * All fixed, so the page moves across the paper instead of dragging it.
+   */
+  .paper body {
+    background-color: var(--background);
+    /*
+     * A dot-gridded drafting sheet.
+     *
+     * Top to bottom: a twin margin rule down the left in the accent red, a
+     * heavier dot every 96px to give the field a rhythm, a fine dot every 24px,
+     * and the photographed paper underneath.
+     *
+     * The dot grids are anchored to the top-left rather than centred, so the
+     * 96px marks always land exactly on a 24px dot at any viewport width.
+     * Everything multiplies into the photo so it reads as printed on the stock,
+     * and everything is fixed so the page scrolls across one sheet.
+     */
+    /* Dot grid only. The margin rules moved to a fixed frame below, so they can
+       run on all four sides instead of just the left. */
+    background-image:
+      radial-gradient(circle at 1px 1px, rgb(52 74 104 / 0.34) 0 1.6px, transparent 1.6px),
+      radial-gradient(circle at 1px 1px, rgb(52 74 104 / 0.22) 0 1px, transparent 1px);
+    background-size:
+      96px 96px,
+      24px 24px;
+    background-position: 0 0;
+    /* The grid belongs to the page, so it scrolls with the content. */
+    background-attachment: scroll, scroll;
+    background-repeat: repeat, repeat;
+    background-blend-mode: multiply, multiply;
+  }
+  /*
+   * The sheet, on the root element rather than on body.
+   *
+   * Paint order is what forces this. A pseudo-element with z-index -1 still
+   * paints above its own parent's background, so putting the paper on
+   * body::before hid the dot grid underneath it. The root's background paints
+   * first of anything, so the dots on body land cleanly on top.
+   *
+   * Greyscale and the evened tone are baked into the file, so nothing has to
+   * be blended at runtime to strip the warm cast.
+   */
+  .paper {
+    background-image: url("/textures/paper.webp");
+    background-size: cover;
+    /* Anchored right, where the creases are most pronounced. Centred, the
+       interesting part of the photograph fell outside the viewport. */
+    background-position: right center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+  }
+
+  /*
+   * The sheet margin: twin rules boxing the page on all four sides, the way a
+   * drafting sheet is bordered. Fixed, so the frame stays put while the content
+   * scrolls inside it, and inert so it never intercepts a click.
+   *
+   * Drawn as the first child so it paints above the dot grid but beneath
+   * everything in the document.
+   */
+  .paper body::before,
+  .paper body::after {
+    content: "";
+    position: fixed;
+    pointer-events: none;
+    border: 1px solid rgb(156 61 44 / 0.3);
+  }
+  .paper body::before {
+    inset: var(--sheet-margin);
+  }
+  .paper body::after {
+    inset: calc(var(--sheet-margin) + 4px);
+    border-color: rgb(156 61 44 / 0.16);
+  }
+
+  .paper ::selection {
+    background: rgb(156 61 44 / 0.18);
+    color: var(--foreground);
+  }
+
   body {
     color: var(--foreground);
-    background:
-      radial-gradient(
-        ellipse at top left,
-        rgba(100, 255, 218, 0.04),
-        transparent 50%
-      ),
-      radial-gradient(
-        ellipse at bottom right,
-        rgba(100, 130, 255, 0.04),
-        transparent 50%
-      ),
-      var(--background);
-    background-attachment: fixed;
+    /* One flat surface. The corner gradients read as a haze behind the header
+       and worked against the flat treatment the header and footer now share. */
+    background: var(--background);
     min-height: 100vh;
   }
   ::selection {
     background: rgb(100 255 218 / 0.2);
     color: var(--foreground);
+  }
+}
+
+/*
+ * Drawn headings.
+ *
+ * Deliberately unlayered. Tailwind's utilities sit in a later cascade layer, so
+ * `font-bold` and `text-foreground` on a heading beat anything written inside
+ * @layer base regardless of specificity.
+ *
+ * Weight is pulled well back from bold: a pencil on its point makes a thin,
+ * uneven line, and a 700-weight face reads as print no matter how much grain
+ * is layered onto it.
+ */
+.paper h1,
+.paper .graphite {
+  filter: url(#graphite);
+  mix-blend-mode: multiply;
+}
+/* Displacement is absolute, so a smaller heading needs a gentler push or the
+   glyphs come apart. */
+.paper h2,
+.paper .graphite-sm {
+  filter: url(#graphite-sm);
+  mix-blend-mode: multiply;
+}
+/* A heading with a drawn span inside it, or with anything animating inside it,
+   is not filtered as a whole: doubling the displacement smears the glyphs, and
+   a transition under a filter re-runs the whole chain every frame. */
+.paper h1:has(.graphite),
+.paper h2:has(.graphite),
+.paper h2:has(.graphite-sm),
+.paper h2:has(.transition-all) {
+  filter: none;
+  mix-blend-mode: normal;
+}
+/* Everything on the sheet is written by hand, including the monospace, so
+   nothing looks typeset next to something drawn. */
+.paper body,
+.paper .font-sans,
+.paper .font-mono,
+.paper h1,
+.paper h2,
+.paper .graphite {
+  font-family: var(--font-hand), "Segoe Print", sans-serif;
+}
+.paper h1,
+.paper h2,
+.paper .graphite {
+  font-weight: 400;
+  /* The hand is loosely spaced by nature; tightening it slightly keeps a large
+     heading from drifting apart. */
+  letter-spacing: -0.01em;
+}
+/* Handwritten glyphs sit tighter vertically than a sans; give lines room. */
+.paper p,
+.paper li {
+  line-height: 1.75;
+}
+
+/*
+ * Body copy is the hand, but not the graphite filter.
+ *
+ * Filtering a paragraph rasterises its whole box, so anything clipped or
+ * translucent around it (the project cards use `line-clamp` inside a
+ * semi-transparent panel) renders as a solid block instead of text. It is also
+ * the most expensive thing on the page, repeated per paragraph.
+ *
+ * At body size the tooth was not legible anyway; the letterforms carry the
+ * pencil read on their own.
+ */
+/* Colour only where the heading has no colour of its own. The h2 carries a
+   muted grey and an accent-coloured rotating word; overriding it flattened
+   both into the same wash. */
+.paper h1,
+.paper .graphite {
+  /* Soft graphite rather than ink, and short of full density so the sheet
+     reads through the stroke. */
+  color: #5b5852;
+  opacity: 0.92;
+}
+@media (prefers-reduced-motion: reduce) {
+  .paper h1,
+  .paper h2,
+  .paper .graphite,
+  .paper .graphite-sm {
+    filter: none;
+    mix-blend-mode: normal;
   }
 }

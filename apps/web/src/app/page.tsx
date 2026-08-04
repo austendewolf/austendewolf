@@ -11,13 +11,18 @@ export default async function HomePage() {
       <section className="space-y-6">
         <p className="font-mono text-sm text-accent">Hello, I&apos;m</p>
         <h1 className="text-6xl sm:text-7xl font-bold tracking-tight text-foreground">
-          Austen{" "}
+          {/* Only the lettering is drawn. The emoji is artwork already, and
+              running it through the graphite filter turns it to mud. */}
+          <span className="graphite">Austen</span>{" "}
           <span aria-hidden className="text-3xl sm:text-4xl align-middle">
             👋🏾
           </span>
         </h1>
         <h2 className="text-2xl sm:text-3xl text-muted-foreground">
-          I build <RotatingWords />
+          {/* Only the fixed words are drawn. RotatingWords animates its own
+              opacity, and an animating child forces the graphite filter to
+              recompute every frame. */}
+          <span className="graphite-sm">I build</span> <RotatingWords />
         </h2>
         <p className="max-w-xl text-base text-muted-foreground leading-relaxed">
           They&apos;re all products in the end. I like making them, and I like
