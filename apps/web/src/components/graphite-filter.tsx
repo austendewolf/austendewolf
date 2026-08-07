@@ -1,149 +1,142 @@
 /**
- * Graphite text.
+ * One mark-making primitive for the whole sheet.
  *
- * Three things separate a pencil mark from a vector fill, and the chain below
- * models each one:
+ * Everything drawn here — glyphs, rules, the outline of a box — is the same
+ * physical event: a tip dragged across paper. So there is one filter chain,
+ * parameterised by how hard the instrument is pressed and how large the mark
+ * is, rather than a separate effect per kind of element.
  *
- *  1. Paper has grain, and graphite lands on the high points while the pits
- *     stay bare. That is a height field, not a flat noise overlay, so the tooth
- *     is built with feDiffuseLighting using turbulence as the height map and
- *     then used as a mask.
- *  2. The edge of a pencil line is indistinct, because neither the paper nor
- *     the point is regular.
- *  3. A drawn stroke is laid down more than once. Overlapping passes build up
- *     density in the middle and feather at the outside.
+ * The chain only ever *removes* material:
  *
- * So the text is displaced three separate times, each with its own noise and
- * its own amount, each well short of opaque, and the results are blended. A
- * single displaced copy gives you a ragged outline; three give you a stroke.
+ *   1. Displace at three scales — the hand wandering over a word, the point
+ *      wobbling within a stroke, the tooth chattering along the edge.
+ *   2. Modulate alpha with noise, so graphite skips where the paper dips.
  *
- * Displacement is measured in user units rather than relative to the glyph, so
- * a given scale roughens small text far more than large. Hence two filters.
+ * Nothing opaque is ever introduced. That is the property that lets the same
+ * filter sit on a heading and on a panel border: an earlier version ended with
+ * feDiffuseLighting, whose output covers the entire filter region, which turned
+ * every bordered box into a grey slab.
  */
 
-interface StrokeProps {
-  /** Suffix so the primitive results stay unique within one filter. */
+/** Base noise scales for the three displacement passes: hand, point, tooth. */
+const MARK_FREQUENCIES = [0.04, 0.13, 0.38] as const;
+
+/**
+ * A drawn rectangle wanders much more slowly than a letterform does. Its long
+ * edges bow across many inches rather than chattering, so the first pass drops
+ * an order of magnitude in frequency and gains it back in scale — which is what
+ * reads as "ruled freehand" instead of "ruled badly".
+ */
+const BOX_FREQUENCIES = [0.006, 0.05, 0.3] as const;
+
+interface PassProps {
   id: string;
   seed: number;
   frequency: number;
   scale: number;
-  /** How much of the pass survives. Under 1 so passes accumulate. */
-  weight: number;
 }
 
-function Pass({ id, seed, frequency, scale, weight }: StrokeProps) {
+function Displace({ id, seed, frequency, scale }: PassProps) {
   return (
     <>
       <feTurbulence
         type="fractalNoise"
         baseFrequency={frequency}
-        numOctaves={3}
+        numOctaves={2}
         seed={seed}
         result={`n${id}`}
       />
       <feDisplacementMap
-        in="SourceGraphic"
+        in={id === "a" ? "SourceGraphic" : `s${prev(id)}`}
         in2={`n${id}`}
         scale={scale}
         xChannelSelector="R"
         yChannelSelector="G"
-        result={`d${id}`}
+        result={`s${id}`}
       />
-      <feComponentTransfer in={`d${id}`} result={`p${id}`}>
-        <feFuncA type="linear" slope={weight} />
-      </feComponentTransfer>
     </>
   );
 }
 
-interface DefinitionProps {
+const prev = (id: string) => String.fromCharCode(id.charCodeAt(0) - 1);
+
+interface InstrumentProps {
   id: string;
+  /** Overall size of the mark. Displacement is absolute, so this scales it. */
   scale: number;
-  /**
-   * How much graphite survives, 0 to 1. Smaller text has fewer pixels per
-   * stroke, so the same mask that reads as tooth on a display heading eats a
-   * subhead down to nothing.
-   */
-  density: number;
-  /** Grain size. Finer for small text, so the tooth stays in proportion. */
+  /** Grain size of the tooth. Larger marks want coarser skips. */
   grain: number;
+  /**
+   * How hard the instrument is pressed, 0 to 1. A pencil held lightly skips
+   * across the tooth; a pen or marker lays down an almost unbroken line.
+   */
+  pressure: number;
+  /** Noise scales for the three passes. Letterforms and outlines differ. */
+  frequencies?: readonly [number, number, number];
+  /**
+   * Shifts every seed in the chain. Two instruments that differ only here draw
+   * the same kind of mark with a different hand, which is how a page of boxes
+   * avoids being one box stamped repeatedly.
+   */
+  hand?: number;
+  /** Filter region. A wandering outline needs more room than a glyph does. */
+  bleed?: number;
 }
 
-function GraphiteDefinition({ id, scale, density, grain }: DefinitionProps) {
-  const floor = 0.08 + 0.42 * density;
+function Instrument({
+  id,
+  scale,
+  grain,
+  pressure,
+  frequencies = MARK_FREQUENCIES,
+  hand = 0,
+  bleed = 12,
+}: InstrumentProps) {
+  const floor = 0.2 + 0.75 * pressure;
+  const mid = Math.min(1, floor + 0.22);
   return (
     <filter
       id={id}
-      x="-18%"
-      y="-18%"
-      width="136%"
-      height="136%"
+      x={`-${bleed}%`}
+      y={`-${bleed}%`}
+      width={`${100 + bleed * 2}%`}
+      height={`${100 + bleed * 2}%`}
       colorInterpolationFilters="sRGB"
     >
-      {/* The sheet's tooth, lit from the upper left so the grain has real
-          highs and lows rather than being flat speckle. */}
-      {/* Coarse enough that individual skips are visible as flecks of bare
-          paper. At pixel scale this averages into a grey film instead. */}
+      <Displace
+        id="a"
+        seed={11 + hand}
+        frequency={frequencies[0]}
+        scale={scale * 2.4}
+      />
+      <Displace
+        id="b"
+        seed={29 + hand}
+        frequency={frequencies[1]}
+        scale={scale * 1.4}
+      />
+      <Displace
+        id="c"
+        seed={53 + hand}
+        frequency={frequencies[2]}
+        scale={scale * 0.65}
+      />
+
       <feTurbulence
         type="fractalNoise"
         baseFrequency={grain}
         numOctaves="3"
-        seed="4"
+        seed={7 + hand}
         result="grain"
       />
-      {/* A low elevation rakes the light across the grain, which throws the
-          pits into shadow instead of washing the whole field white. */}
-      <feDiffuseLighting
-        in="grain"
-        surfaceScale="4.5"
-        diffuseConstant="1.1"
-        lightingColor="#ffffff"
-        result="lit"
-      >
-        <feDistantLight azimuth="228" elevation="24" />
-      </feDiffuseLighting>
-      <feColorMatrix in="lit" type="luminanceToAlpha" result="toothRaw" />
-      {/* Steep, so the mask actually swings between bare and covered. A gentle
-          curve here averages out to a flat wash and the grain disappears. */}
-      <feComponentTransfer in="toothRaw" result="tooth">
-        <feFuncA
-          type="table"
-          tableValues={`${floor} ${floor + 0.28} 0.95 1`}
-        />
+      <feColorMatrix in="grain" type="luminanceToAlpha" result="grainAlpha" />
+      <feComponentTransfer in="grainAlpha" result="tooth">
+        <feFuncA type="table" tableValues={`${floor} ${mid} 1 ${mid} 0.95`} />
       </feComponentTransfer>
 
-      {/* Light passes: three of these stacked at high opacity just rebuild a
-          solid glyph, which is the opposite of the point. */}
-      {/*
-       * Three scales of irregularity, coarse to fine:
-       *  a — the hand. A slow wander over several characters.
-       *  b — the point. Wobble across a single stroke.
-       *  c — the tooth. Fine chatter along the edge.
-       *
-       * baseFrequency is cycles per user unit, so 1.0 makes features about a
-       * pixel wide, which reads as static rather than as a drawn line.
-       */}
-      <Pass id="a" seed={11} frequency={0.045} scale={scale * 2.6} weight={0.34 + 0.36 * density} />
-      <Pass
-        id="b"
-        seed={29}
-        frequency={0.14}
-        scale={scale * 1.5}
-        weight={0.26 + 0.36 * density}
-      />
-      <Pass
-        id="c"
-        seed={53}
-        frequency={0.4}
-        scale={scale * 0.7}
-        weight={0.32 + 0.36 * density}
-      />
-
-      <feBlend in="pa" in2="pb" mode="normal" result="ab" />
-      <feBlend in="ab" in2="pc" mode="normal" result="strokes" />
-
-      {/* Graphite only where the tooth stands proud. */}
-      <feComposite in="strokes" in2="tooth" operator="arithmetic" k1="1" k2="0" k3="0" k4="0" />
+      {/* `in` multiplies source alpha by the tooth and keeps the source colour,
+          so the mark thins and skips without gaining any fill of its own. */}
+      <feComposite in="sc" in2="tooth" operator="in" />
     </filter>
   );
 }
@@ -156,14 +149,51 @@ export function GraphiteFilter() {
       style={{ position: "absolute", width: 0, height: 0, overflow: "hidden" }}
     >
       <defs>
-        <GraphiteDefinition id="graphite" scale={0.85} density={0} grain={0.16} />
-        {/* Smaller headings: less push, proportionally finer grain, and much
-            more of the graphite left behind, or the subhead fades out. */}
-        <GraphiteDefinition id="graphite-sm" scale={0.5} density={0.85} grain={0.34} />
-        {/* Body copy. Barely any displacement and nearly full density: at this
-            size the goal is tooth on the stroke, not a visibly drawn edge, and
-            anything stronger costs legibility. */}
-        <GraphiteDefinition id="graphite-text" scale={0.22} density={1} grain={0.55} />
+        {/* Pencil: the default hand. Light pressure, visible tooth. */}
+        <Instrument id="pencil" scale={0.9} grain={0.16} pressure={0.1} />
+        {/* Smaller marks need proportionally less push and finer grain. */}
+        <Instrument id="pencil-sm" scale={0.45} grain={0.34} pressure={0.45} />
+        {/* Body size: barely displaced, nearly unbroken, or it costs legibility. */}
+        <Instrument id="pencil-xs" scale={0.2} grain={0.6} pressure={0.8} />
+        {/* Pen: emphasis. Pressed hard, so almost no skip and a steadier line.
+            This is what replaces bold — a different instrument, not a heavier
+            weight of the same one. */}
+        <Instrument id="pen" scale={0.35} grain={0.5} pressure={0.96} />
+
+        {/* Boxes. Three of the same hand, drawn three times: the noise is
+            deterministic per seed, so without the offsets every rectangle on
+            the page would bow in exactly the same places and read as a texture
+            rather than as something drawn.
+
+            Nearly rectangular is the whole target. The scale is large enough
+            that no edge is truly straight and no corner quite closes, and low
+            enough that the shape is unmistakably a rectangle. */}
+        <Instrument
+          id="box-a"
+          scale={2.6}
+          grain={0.5}
+          pressure={0.86}
+          frequencies={BOX_FREQUENCIES}
+          bleed={4}
+        />
+        <Instrument
+          id="box-b"
+          scale={3.1}
+          grain={0.44}
+          pressure={0.82}
+          frequencies={BOX_FREQUENCIES}
+          hand={101}
+          bleed={4}
+        />
+        <Instrument
+          id="box-c"
+          scale={2.2}
+          grain={0.56}
+          pressure={0.9}
+          frequencies={BOX_FREQUENCIES}
+          hand={211}
+          bleed={4}
+        />
       </defs>
     </svg>
   );

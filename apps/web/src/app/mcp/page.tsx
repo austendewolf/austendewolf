@@ -1,3 +1,4 @@
+import { SignOutButton } from "@/components/sign-out-button";
 import { Button } from "@/components/ui/button";
 import { checkAccount, listAccounts } from "@/lib/mcp/accounts";
 import { DEFAULT_SCOPES, SCOPE_CATALOG, oauthConfigured, redirectUri } from "@/lib/mcp/oauth";
@@ -23,8 +24,9 @@ function since(date: Date | null): string {
 /**
  * Manage the Google accounts the MCP server acts as.
  *
- * Restricted to the owner. Sign-in on this site is open to anyone with a
- * GitHub account, so being signed in is not enough to reach this page.
+ * Restricted to the owner. The Supabase project behind this site is shared with
+ * other products and holds accounts that are not the owner's, so being signed
+ * in is not on its own enough to reach this page.
  */
 export default async function ConnectionsPage({
   searchParams,
@@ -39,20 +41,21 @@ export default async function ConnectionsPage({
       <div className="mx-auto max-w-2xl px-6 py-24">
         <h1 className="text-3xl font-bold tracking-tight">Connections</h1>
         <p className="mt-3 text-muted-foreground">
-          {viewer.misconfigured
-            ? "This page has no owner configured, so it is closed to everyone."
-            : viewer.signedIn
-              ? "You are signed in, but this page is limited to the site owner."
-              : "This page is private."}
+          {viewer.signedIn
+            ? "You are signed in, but this page is limited to the site owner."
+            : "This page is private."}
         </p>
         {!viewer.signedIn && (
           <a
-            href="/login"
-            className="mt-8 inline-block rounded-sm border border-border/60 px-4 py-2 text-sm hover:border-accent/50"
+            href="/login?next=%2Fmcp"
+            className="mt-8 inline-block border border-border/60 px-4 py-2 text-sm hover:border-accent"
           >
             Sign in
           </a>
         )}
+        {/* Signed in as the wrong account: the way out is to sign out, not to
+            sign in again on top of a session that will keep being refused. */}
+        {viewer.signedIn && !viewer.isOwner && <SignOutButton className="mt-8" />}
       </div>
     );
   }
@@ -64,7 +67,21 @@ export default async function ConnectionsPage({
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-16">
-      <h1 className="text-4xl font-bold tracking-tight">Connections</h1>
+      <div className="flex items-start justify-between gap-6">
+        <h1 className="text-4xl font-bold tracking-tight">Connections</h1>
+        <div className="text-right">
+          <p className="text-xs text-muted-foreground">{viewer.email}</p>
+          <div className="mt-2 flex items-center justify-end gap-3">
+            <a
+              href="/account/password"
+              className="text-xs text-muted-foreground hover:text-accent transition-colors"
+            >
+              Password
+            </a>
+            <SignOutButton />
+          </div>
+        </div>
+      </div>
       <p className="mt-3 text-muted-foreground leading-relaxed">
         Google accounts the MCP server at{" "}
         <code className="font-mono text-sm">mcp.austendewolf.com</code> can act as.
@@ -146,6 +163,42 @@ export default async function ConnectionsPage({
               <div className="mt-5 flex gap-2">
                 <form action={connectAccount}>
                   <input type="hidden" name="account" value={a.name} />
+                  {/*
+                    Reconnect has to resend the scopes. The action falls back to
+                    whatever the account already holds when none are posted, which
+                    keeps a reconnect from narrowing access but also means it can
+                    never widen it. New capability would be invisible without
+                    these, so they are pre-checked with what the account has plus
+                    anything newly offered by default.
+                  */}
+                  <details className="mb-3">
+                    <summary className="cursor-pointer text-xs text-muted-foreground">
+                      Access to request
+                    </summary>
+                    <div className="mt-3 grid gap-4 sm:grid-cols-3">
+                      {SCOPE_CATALOG.map((group) => (
+                        <fieldset key={group.service} className="space-y-2">
+                          <legend className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+                            {group.service}
+                          </legend>
+                          {group.scopes.map((s) => (
+                            <label key={s.url} className="flex items-start gap-2 text-xs">
+                              <input
+                                type="checkbox"
+                                name="scope"
+                                value={s.url}
+                                defaultChecked={
+                                  a.scopes.includes(s.url) || DEFAULT_SCOPES.includes(s.url)
+                                }
+                                className="mt-0.5"
+                              />
+                              <span>{s.label}</span>
+                            </label>
+                          ))}
+                        </fieldset>
+                      ))}
+                    </div>
+                  </details>
                   <Button type="submit" variant="outline" size="sm" disabled={!configured}>
                     Reconnect
                   </Button>

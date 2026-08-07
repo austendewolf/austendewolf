@@ -46,7 +46,56 @@ export const SCOPE_CATALOG = [
     service: "Drive",
     scopes: [
       { url: "https://www.googleapis.com/auth/drive.readonly", label: "Read files", default: true },
+      // Comments are a Drive concern, not a Docs one, and creating them needs
+      // more than drive.readonly.
       { url: "https://www.googleapis.com/auth/drive", label: "Full access", default: false },
+    ],
+  },
+  {
+    service: "Docs",
+    scopes: [
+      {
+        url: "https://www.googleapis.com/auth/documents.readonly",
+        label: "Read documents",
+        default: false,
+      },
+      {
+        url: "https://www.googleapis.com/auth/documents",
+        label: "Read and edit documents",
+        default: true,
+      },
+    ],
+  },
+  {
+    service: "Sheets",
+    scopes: [
+      {
+        url: "https://www.googleapis.com/auth/spreadsheets.readonly",
+        label: "Read spreadsheets",
+        default: false,
+      },
+      {
+        url: "https://www.googleapis.com/auth/spreadsheets",
+        label: "Read and edit spreadsheets",
+        default: true,
+      },
+    ],
+  },
+  {
+    service: "Slides",
+    scopes: [
+      {
+        url: "https://www.googleapis.com/auth/presentations.readonly",
+        label: "Read presentations",
+        default: false,
+      },
+      // Off by default: the Slides tools exist, but Docs and Sheets are the
+      // ones in use, and every extra scope widens the consent for no gain.
+      {
+        url: "https://www.googleapis.com/auth/presentations",
+        label: "Read and edit presentations",
+        default: false,
+      },
     ],
   },
 ] as const;

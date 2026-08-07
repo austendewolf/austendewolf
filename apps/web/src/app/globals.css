@@ -79,47 +79,89 @@
 }
 
 /*
- * Paper — an art-book surface.
+ * Blueprint.
  *
- * A warm off-white rather than white, because paper is never #fff, and ink
- * that is warm near-black rather than pure black. Texture is procedural: two
- * layers of SVG fractal noise, a fine grain for tooth and a much coarser one
- * for the mottle that makes a sheet read as a sheet. No image assets, so it
- * stays crisp at any pixel density.
+ * The palette is not a set of UI colours. It is one exposed sheet and the lines
+ * lifted off it, and every token below resolves to one of those.
+ *
+ *   paper        the ground. Deep cyanotype blue, and the darkest thing here.
+ *   line         white at three strengths: soft, normal, strong.
+ *   line-bright  emphasis. Pure white, the full absence of exposure.
+ *
+ * There is no fill, no surface, and no elevation, so `card`, `muted`,
+ * `secondary` and `popover` all resolve to nothing rather than to a panel.
  */
 .paper {
-  /* Cold-press cotton rag: near-white and neutral, not cream. */
-  --background: #f3f2ef;
-  --foreground: #191817;
-  --card: #eeedea;
-  --card-foreground: #191817;
-  --popover: #eeedea;
-  --popover-foreground: #191817;
-  /* Ink, so a button reads as pressed onto the page rather than lit up. */
-  --primary: #191817;
-  --primary-foreground: #f3f2ef;
-  --secondary: #e6e5e1;
-  --secondary-foreground: #191817;
-  --muted: #e6e5e1;
-  --muted-foreground: #6a6862;
-  /* A single red, the way a plate caption or a printer's mark sits on a page. */
-  --accent: #9c3d2c;
-  --accent-foreground: #f3f2ef;
-  --destructive: #a8322a;
-  --border: rgb(25 24 23 / 0.16);
-  --input: rgb(25 24 23 / 0.22);
-  --ring: rgb(25 24 23 / 0.35);
-  --radius: 0.125rem;
-  --sidebar: #eeedea;
-  --sidebar-foreground: #191817;
-  --sidebar-primary: #191817;
-  --sidebar-primary-foreground: #f3f2ef;
-  --sidebar-accent: #e6e5e1;
-  --sidebar-accent-foreground: #191817;
-  --sidebar-border: rgb(25 24 23 / 0.16);
-  --sidebar-ring: rgb(25 24 23 / 0.35);
-  /* Where the twin margin rule falls, measured from the left edge of the sheet. */
-  --sheet-margin: 4rem;
+  /* The ground the print is exposed on. Everything else is a line lifted off it. */
+  --paper: #113a63;
+  /*
+   * The sheet as it actually appears, after the texture multiplies it down.
+   * Anything opaque laid over the drawing has to use this instead of `--paper`,
+   * or it reads as a lighter patch — the flat colour is the unprinted value,
+   * not the one your eye is comparing it against.
+   */
+  --paper-printed: #0d2f51;
+
+  /*
+   * A blueprint reverses the sheet: the ground is the ink and the lines are the
+   * absence of it, so everything drawn is lighter than what it sits on. These
+   * are four steps of white against the blue rather than four pressures of
+   * graphite, which is why they are named for the line and not the tool.
+   */
+  --line-soft: #7ea3c8;
+  --line: #c3d8ea;
+  --line-strong: #e8f1f8;
+  --line-bright: #ffffff;
+  /*
+   * There is no second colour. A print is one ink, so emphasis is the same
+   * white pushed to full strength rather than a hue introduced to carry it.
+   */
+  --marker: var(--line-bright);
+
+  /* shadcn tokens, mapped onto the four things that actually exist. */
+  --background: var(--paper);
+  --foreground: var(--line);
+  --card: transparent;
+  --card-foreground: var(--line);
+  --popover: transparent;
+  --popover-foreground: var(--line);
+  --primary: var(--line-bright);
+  --primary-foreground: var(--paper);
+  --secondary: transparent;
+  --secondary-foreground: var(--line);
+  --muted: transparent;
+  --muted-foreground: var(--line-soft);
+  --accent: var(--marker);
+  --accent-foreground: var(--paper);
+  --destructive: var(--marker);
+  --border: var(--line-soft);
+  --input: var(--line-soft);
+  --ring: var(--line);
+  /* Nothing drawn by hand has a uniform corner. */
+  --radius: 0;
+  --sidebar: transparent;
+  --sidebar-foreground: var(--line);
+  --sidebar-primary: var(--line-bright);
+  --sidebar-primary-foreground: var(--paper);
+  --sidebar-accent: transparent;
+  --sidebar-accent-foreground: var(--line);
+  --sidebar-border: var(--line-soft);
+  --sidebar-ring: var(--line);
+
+  /*
+   * Where the margin rule falls, measured in from each edge. The frame, the
+   * title block and both template bands read these, which is what keeps them
+   * joined instead of merely lined up.
+   *
+   * The top and bottom margins are deep because they carry the template — the
+   * running head and the footer print in that band, outside the border, so
+   * everything inside the frame belongs to the sheet being viewed.
+   */
+  --sheet-margin-x: 1.5rem;
+  --sheet-margin-y: 3.25rem;
+  /* Weight of every ruled line on the sheet, and what the key insets by so it
+     nests inside the margin instead of printing over it. */
+  --sheet-rule: 1px;
 }
 
 @layer base {
@@ -131,7 +173,7 @@
     color-scheme: dark;
   }
   html.paper {
-    color-scheme: light;
+    color-scheme: dark;
   }
   /*
    * The sheet: cold-press watercolour tooth.
@@ -158,19 +200,12 @@
      * Everything multiplies into the photo so it reads as printed on the stock,
      * and everything is fixed so the page scrolls across one sheet.
      */
-    /* Dot grid only. The margin rules moved to a fixed frame below, so they can
-       run on all four sides instead of just the left. */
-    background-image:
-      radial-gradient(circle at 1px 1px, rgb(52 74 104 / 0.34) 0 1.6px, transparent 1.6px),
-      radial-gradient(circle at 1px 1px, rgb(52 74 104 / 0.22) 0 1px, transparent 1px);
-    background-size:
-      96px 96px,
-      24px 24px;
-    background-position: 0 0;
-    /* The grid belongs to the page, so it scrolls with the content. */
-    background-attachment: scroll, scroll;
-    background-repeat: repeat, repeat;
-    background-blend-mode: multiply, multiply;
+    /* Everything visual is drawn by SheetBackdrop; body must stay clear so it
+       does not paint over it. The base `body` rule uses the `background`
+       shorthand, which fills in an opaque colour. */
+    background: none;
+    /* The grid layer is absolutely positioned against this. */
+    position: relative;
   }
   /*
    * The sheet, on the root element rather than on body.
@@ -183,42 +218,518 @@
    * Greyscale and the evened tone are baked into the file, so nothing has to
    * be blended at runtime to strip the warm cast.
    */
+  /* A flat fallback under the backdrop, so a failed image never leaves the
+     page on a transparent canvas. */
   .paper {
+    background-color: var(--background);
+  }
+
+  /* --------------------------------------------------------- the backdrop */
+
+  .paper .sheet-backdrop > * {
+    pointer-events: none;
+  }
+
+  /* Fixed, so the page moves across one continuous sheet. A fixed element
+     rather than a fixed background: own compositor layer, no per-scroll
+     repaint, and no Safari fixed-attachment bug. */
+  .paper .sheet-paper {
+    position: fixed;
+    inset: 0;
+    z-index: -2;
     background-image: url("/textures/paper.webp");
     background-size: cover;
-    /* Anchored right, where the creases are most pronounced. Centred, the
-       interesting part of the photograph fell outside the viewport. */
+    /* Anchored right, where the creases are most pronounced. */
     background-position: right center;
     background-repeat: no-repeat;
-    background-attachment: fixed;
+    /*
+     * The texture stays greyscale and gets its colour from a multiply against
+     * the blue. Tinting the image with a hue rotation instead would drag the
+     * creases and fibres toward the same hue and flatten them; multiplying
+     * keeps every tonal variation in the photograph and simply prints it in
+     * blue, which is what an actual cyanotype does to a sheet.
+     */
+    background-color: var(--paper);
+    background-blend-mode: multiply;
+  }
+
+  /* ------------------------------------------------ the margin and its key */
+
+  /*
+   * Above the content, not behind it. A drawing does not run over its own
+   * border, so the margin stays clear as the sheet scrolls past underneath.
+   * The layer itself is inert; the key inside it takes pointer events back,
+   * because it carries the sheet index.
+   */
+  .paper .sheet-frame-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    pointer-events: none;
+  }
+
+  /* One ruled rectangle, closed on all four sides. */
+  .paper .sheet-frame {
+    position: absolute;
+    top: var(--sheet-margin-y);
+    bottom: var(--sheet-margin-y);
+    left: var(--sheet-margin-x);
+    right: var(--sheet-margin-x);
+    border: var(--sheet-rule) solid rgb(255 255 255 / 0.42);
   }
 
   /*
-   * The sheet margin: twin rules boxing the page on all four sides, the way a
-   * drafting sheet is bordered. Fixed, so the frame stays put while the content
-   * scrolls inside it, and inert so it never intercepts a click.
+   * The key, top right.
    *
-   * Drawn as the first child so it paints above the dot grid but beneath
-   * everything in the document.
+   * Inset by exactly the weight of the margin rule, so it sits *inside* the
+   * border rather than on top of it. Landing flush instead put its opaque
+   * background over the frame's own top and right lines, which erased the
+   * margin for the height of the key — the border appeared to stop and restart
+   * around it. One rule of offset and the margin runs unbroken around all four
+   * sides while the key still reads as built into the corner.
+   *
+   * Both offsets come from the same variables as the frame, so the fit holds at
+   * any viewport rather than being lined up by eye.
    */
-  .paper body::before,
-  .paper body::after {
-    content: "";
+  .paper .title-block {
+    position: absolute;
+    right: calc(var(--sheet-margin-x) + var(--sheet-rule));
+    top: calc(var(--sheet-margin-y) + var(--sheet-rule));
+    width: 15rem;
+    pointer-events: auto;
+    border-left: var(--sheet-rule) solid rgb(255 255 255 / 0.42);
+    border-bottom: var(--sheet-rule) solid rgb(255 255 255 / 0.42);
+    /*
+     * Opaque, because on a real sheet the drawing stops at the key rather than
+     * running under it. Without this the page scrolls through the block and the
+     * two sets of text overlap.
+     *
+     * It carries the sheet's own texture rather than a flat fill, pinned to the
+     * viewport so it lines up with `.sheet-paper` exactly. A flat blue patch
+     * reads lighter than its surroundings — the texture multiplies the field
+     * down, so matching it by eye is not possible; the only way to disappear
+     * into the sheet is to be the same image at the same position. The colour
+     * underneath is the fallback if the texture ever fails to load.
+     */
+    background-color: var(--paper);
+    background-image: url("/textures/paper.webp");
+    background-size: cover;
+    background-position: right center;
+    background-attachment: fixed;
+    background-blend-mode: multiply;
+    font-family: var(--font-mono);
+    color: var(--line);
+  }
+
+  /*
+   * The name plate: the one reversed element on the sheet.
+   *
+   * A drawing office stamps its name into the block rather than lettering it,
+   * so this is the only place the white becomes the ground and the blue becomes
+   * the ink. It reads as printed on rather than drawn, which is exactly what it
+   * is.
+   */
+  .paper .title-block-name {
+    display: block;
+    padding: 0.4rem 0.6rem;
+    background-color: var(--line-bright);
+    color: var(--paper);
+    font-size: 0.78rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  .paper .title-block-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.32rem 0.6rem;
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    /* Rules between every row, so the block reads as ruled cells. */
+    border-top: 1px solid rgb(255 255 255 / 0.24);
+  }
+
+  .paper .title-block-label {
+    color: var(--line-soft);
+  }
+  .paper .title-block-value {
+    color: var(--line-soft);
+  }
+
+  /* A sheet you can open. Hover lifts the ink, nothing moves. */
+  .paper .title-block-link:hover .title-block-label,
+  .paper .title-block-link:hover .title-block-value {
+    color: var(--line-bright);
+  }
+
+  /*
+   * The sheet on the board. Marked in the index rather than only named at the
+   * bottom, so the key answers "where am I" without being read twice.
+   */
+  .paper .title-block-link[aria-current="page"] .title-block-label {
+    color: var(--line-bright);
+  }
+  .paper .title-block-link[aria-current="page"] .title-block-value {
+    color: var(--line-strong);
+  }
+
+  .paper .title-block-current .title-block-value {
+    color: var(--line-strong);
+  }
+
+  /*
+   * A title block needs a sheet wide enough to carry one.
+   *
+   * The threshold is set by the widest content column plus the block: below it
+   * the key lands on the drawing and starts hiding things — on the resume it
+   * clipped the dates. Narrower than this, the margin alone reads as the
+   * border, which is still a correct drawing.
+   */
+  /* ------------------------------------------------------ template bands */
+
+  /*
+   * The running head and the footer, printed in the margin outside the border.
+   *
+   * Fixed to the band rather than sitting in flow, so the area inside the frame
+   * is only ever the sheet being viewed. They carry the paper texture pinned to
+   * the viewport for the same reason the key does: the drawing scrolls beneath
+   * them and would otherwise show through.
+   */
+  .paper .sheet-band {
     position: fixed;
-    pointer-events: none;
-    border: 1px solid rgb(156 61 44 / 0.3);
+    left: 0;
+    right: 0;
+    z-index: 35;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    height: var(--sheet-margin-y);
+    padding: 0 calc(var(--sheet-margin-x) + 0.75rem);
+    background-color: var(--paper);
+    background-image: url("/textures/paper.webp");
+    background-size: cover;
+    background-position: right center;
+    background-attachment: fixed;
+    background-blend-mode: multiply;
   }
-  .paper body::before {
-    inset: var(--sheet-margin);
+  .paper .sheet-band-top {
+    top: 0;
   }
-  .paper body::after {
-    inset: calc(var(--sheet-margin) + 4px);
-    border-color: rgb(156 61 44 / 0.16);
+  .paper .sheet-band-bottom {
+    bottom: 0;
+  }
+
+  .paper .sheet-wordmark {
+    font-size: 0.8rem;
+    letter-spacing: 0.06em;
+    color: var(--line-strong);
+  }
+  .paper .sheet-wordmark:hover {
+    color: var(--line-bright);
+  }
+
+  /*
+   * The drawing area starts inside the border. Both bands are out of flow, so
+   * the document has to be inset past them by hand.
+   */
+  .paper body {
+    padding-top: var(--sheet-margin-y);
+    padding-bottom: var(--sheet-margin-y);
+  }
+
+  /*
+   * A band is a fixed height with everything on one line, so its contents have
+   * to fit rather than wrap — an overflow here is silent, and simply pushes
+   * whatever came last off the sheet.
+   */
+  @media (max-width: 34rem) {
+    .paper .sheet-band {
+      gap: 0.75rem;
+      padding: 0 calc(var(--sheet-margin-x) + 0.25rem);
+    }
+    .paper .sheet-wordmark {
+      font-size: 0.7rem;
+    }
+    .paper .sheet-band-bottom p {
+      font-size: 0.62rem;
+    }
+  }
+
+  /* One line, always. Wrapping pushes content out of a fixed-height band. */
+  .paper .sheet-band > * {
+    white-space: nowrap;
+  }
+
+  /* --------------------------------------------- the key on a narrow sheet */
+
+  /*
+   * The fold. Hidden on a sheet wide enough to carry the whole index, which is
+   * why the index below needs no open state there.
+   */
+  .paper .title-block-toggle {
+    display: none;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+  }
+  .paper .title-block-toggle:hover .title-block-label,
+  .paper .title-block-toggle:hover .title-block-value {
+    color: var(--line-bright);
+  }
+
+  /*
+   * Below this the full index would reach across the drawing and cover it —
+   * on the resume it lands squarely on the header. So the key stays exactly
+   * where it is and the index folds into one row of it instead.
+   */
+  @media (max-width: 68rem) {
+    .paper .title-block {
+      width: 13rem;
+    }
+    .paper .title-block-toggle {
+      display: flex;
+    }
+    .paper .title-block-index {
+      display: none;
+    }
+    .paper .title-block[data-open] .title-block-index {
+      display: block;
+    }
+    /* Which sheet is on the board matters least when the list is collapsed,
+       and it is already named by the page itself. */
+    .paper .title-block-current {
+      display: none;
+    }
+  }
+
+  @media (max-width: 34rem) {
+    .paper .title-block {
+      width: 11.5rem;
+    }
+    .paper .title-block-name {
+      font-size: 0.68rem;
+      letter-spacing: 0.1em;
+    }
+  }
+
+  /* ----------------------------------------------------------- site plan */
+
+  /*
+   * All colour lives here rather than on the SVG, so the drawing follows the
+   * sheet's palette instead of keeping a second copy of it. Fills stay `none`
+   * throughout: a print has no filled shapes, only line work.
+   */
+  .paper .plan-frame {
+    overflow-x: auto;
+    overflow-y: hidden;
+    /* Only the drawing scrolls, so the sheet itself never moves sideways. */
+    overscroll-behavior-x: contain;
+  }
+
+  /* The scale block, in the margin under the drawing. */
+  .paper .plan-scale {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding-top: 0.5rem;
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--line-soft);
+  }
+  .paper .plan-scale button {
+    border: 1px solid var(--line-soft);
+    padding: 0 0.4rem;
+    line-height: 1.4;
+    color: var(--line);
+    cursor: pointer;
+  }
+  .paper .plan-scale button:hover {
+    border-color: var(--line-bright);
+    color: var(--line-bright);
+  }
+  .paper .plan-scale-value {
+    min-width: 3.4rem;
+    color: var(--line-strong);
+  }
+  .paper .plan {
+    display: block;
+    width: 100%;
+    height: auto;
+    /* Below this the labels stop being readable and the drawing becomes
+       decoration. Hold the size and let the sheet scroll instead. */
+    min-width: 44rem;
+  }
+
+  .paper .plan text {
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
+    fill: var(--line);
+  }
+
+  .paper .plan-datum line {
+    stroke: var(--line-strong);
+    stroke-width: 1;
+  }
+  .paper .plan-year {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-anchor: middle;
+    fill: var(--line-soft);
+  }
+
+  /* Every node is the same object, so they share one treatment. */
+  .paper .plan-node rect {
+    fill: none;
+    stroke: var(--line-soft);
+    stroke-width: 1;
+  }
+  .paper .plan-node-label {
+    font-size: 11px;
+    text-anchor: middle;
+    fill: var(--line);
+  }
+
+  /* How long it ran, drawn on the datum below the line. */
+  .paper .plan-extent path {
+    fill: none;
+    stroke: var(--line-soft);
+    stroke-width: 1;
+  }
+  /* Lines up under this node's leader, so you can tell whose extent it is. */
+  .paper .plan-extent-tie {
+    stroke: var(--line);
+  }
+  .paper .plan-node:hover .plan-extent path,
+  .paper .plan-node:focus-visible .plan-extent path {
+    stroke: var(--line-bright);
+  }
+  /* Dashed reads as "alongside" on a drawing, which is what a project running
+     under a job actually is. */
+  .paper .plan-node-project .plan-extent path {
+    stroke-dasharray: 5 3;
+  }
+  .paper .plan-node-role rect,
+  .paper .plan-node-role .plan-extent path {
+    stroke: var(--line);
+  }
+  .paper .plan-node-role .plan-node-label {
+    fill: var(--line-strong);
+  }
+
+  .paper .plan-leader {
+    stroke: var(--line-soft);
+    stroke-width: 1;
+  }
+  .paper .plan-station {
+    stroke: var(--line-strong);
+    stroke-width: 1;
+  }
+  .paper .plan-node rect {
+    fill: none;
+    stroke: var(--line-soft);
+    stroke-width: 1;
+  }
+  .paper .plan-node-label {
+    font-size: 11px;
+    text-anchor: middle;
+    fill: var(--line);
+  }
+
+  /* Hover and focus lift the ink. Nothing moves: it is drawn on. */
+  .paper .plan-node:hover rect,
+  .paper .plan-node:focus-visible rect {
+    stroke: var(--line-bright);
+  }
+  .paper .plan-node:hover .plan-node-label,
+  .paper .plan-node:focus-visible .plan-node-label {
+    fill: var(--line-bright);
+  }
+  .paper .plan-node:hover .plan-leader,
+  .paper .plan-node:focus-visible .plan-leader {
+    stroke: var(--line);
+  }
+  .paper .plan-node:focus,
+  .paper .plan-node:focus {
+    outline: none;
+  }
+  .paper .plan-node,
+  .paper .plan-node {
+    cursor: pointer;
+  }
+
+  /* Revealed by zoom: what a node is, and when. */
+  .paper .plan-node-meta,
+  .paper .plan-node-meta {
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    fill: var(--line-soft);
+  }
+  .paper .plan-node-meta {
+    text-anchor: middle;
+  }
+
+  .paper .plan-node:hover .plan-extent path,
+  .paper .plan-node:focus-visible .plan-extent path {
+    stroke: var(--line-bright);
+  }
+
+  /* ------------------------------------------------------- the open node */
+
+  /*
+   * The one place a fill is correct. A detail balloon on a drawing sits in
+   * cleared space; without it the line work underneath reads straight through
+   * the text.
+   */
+  .paper .plan-panel-bg {
+    fill: var(--paper-printed);
+    stroke: none;
+  }
+  .paper .plan-panel-edge {
+    fill: none;
+    stroke: var(--line-bright);
+    stroke-width: 1;
+  }
+  .paper .plan-panel-title {
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    fill: var(--line-bright);
+  }
+  .paper .plan-panel-meta {
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    fill: var(--line-soft);
+  }
+  .paper .plan-panel-body {
+    font-size: 10px;
+    fill: var(--line);
+  }
+  .paper .plan-panel-link {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    fill: var(--line-strong);
+  }
+  .paper .plan-panel a:hover .plan-panel-link {
+    fill: var(--line-bright);
+  }
+  .paper .plan-panel-close {
+    font-size: 11px;
+    text-anchor: end;
+    fill: var(--line-soft);
+    cursor: pointer;
+  }
+  .paper .plan-panel-close:hover {
+    fill: var(--line-bright);
   }
 
   .paper ::selection {
-    background: rgb(156 61 44 / 0.18);
-    color: var(--foreground);
+    background: rgb(255 255 255 / 0.24);
+    color: var(--line-bright);
   }
 
   body {
@@ -234,90 +745,184 @@
   }
 }
 
+
+/* ==========================================================================
+ * Graphite on paper.
+ *
+ * One material, one surface. Everything visible is a mark made by hand on a
+ * sheet, so the system has no fills, no radii, no shadows, and no weights.
+ *
+ * Emphasis is a change of instrument, not a change of weight:
+ *
+ *   pencil   default. Light pressure, visible tooth, mid graphite.
+ *   pen      emphasis. Pressed hard, almost unbroken, near-black.
+ *   marker   loudest. The one colour on the sheet.
+ *
+ * These rules are deliberately unlayered so they beat Tailwind's utilities,
+ * which live in a later cascade layer and would otherwise reinstate the
+ * digital treatment they are here to remove.
+ * ========================================================================== */
+
 /*
- * Drawn headings.
+ * Everything on a print is lettered by the same hand, and on a technical
+ * drawing that hand is a drafting alphabet: fixed width, even colour, legible
+ * at any reduction. A proportional face here reads as a document that happens
+ * to have a blue background — the monospace is what makes it read as a sheet.
  *
- * Deliberately unlayered. Tailwind's utilities sit in a later cascade layer, so
- * `font-bold` and `text-foreground` on a heading beat anything written inside
- * @layer base regardless of specificity.
- *
- * Weight is pulled well back from bold: a pencil on its point makes a thin,
- * uneven line, and a 700-weight face reads as print no matter how much grain
- * is layered onto it.
+ * Unlayered so it beats Tailwind's `font-sans` utility, which sits in a later
+ * cascade layer and would otherwise put the running text back.
  */
-.paper h1,
-.paper .graphite {
-  filter: url(#graphite);
-  mix-blend-mode: multiply;
+.paper,
+.paper * {
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
 }
-/* Displacement is absolute, so a smaller heading needs a gentler push or the
-   glyphs come apart. */
-.paper h2,
-.paper .graphite-sm {
-  filter: url(#graphite-sm);
-  mix-blend-mode: multiply;
-}
-/* A heading with a drawn span inside it, or with anything animating inside it,
-   is not filtered as a whole: doubling the displacement smears the glyphs, and
-   a transition under a filter re-runs the whole chain every frame. */
-.paper h1:has(.graphite),
-.paper h2:has(.graphite),
-.paper h2:has(.graphite-sm),
-.paper h2:has(.transition-all) {
-  filter: none;
-  mix-blend-mode: normal;
-}
-/* Everything on the sheet is written by hand, including the monospace, so
-   nothing looks typeset next to something drawn. */
-.paper body,
-.paper .font-sans,
-.paper .font-mono,
-.paper h1,
-.paper h2,
-.paper .graphite {
-  font-family: var(--font-hand), "Segoe Print", sans-serif;
-}
-.paper h1,
-.paper h2,
-.paper .graphite {
-  font-weight: 400;
-  /* The hand is loosely spaced by nature; tightening it slightly keeps a large
-     heading from drifting apart. */
-  letter-spacing: -0.01em;
-}
-/* Handwritten glyphs sit tighter vertically than a sans; give lines room. */
+
 .paper p,
 .paper li {
   line-height: 1.75;
 }
 
-/*
- * Body copy is the hand, but not the graphite filter.
- *
- * Filtering a paragraph rasterises its whole box, so anything clipped or
- * translucent around it (the project cards use `line-clamp` inside a
- * semi-transparent panel) renders as a solid block instead of text. It is also
- * the most expensive thing on the page, repeated per paragraph.
- *
- * At body size the tooth was not legible anyway; the letterforms carry the
- * pencil read on their own.
- */
-/* Colour only where the heading has no colour of its own. The h2 carries a
-   muted grey and an accent-coloured rotating word; overriding it flattened
-   both into the same wash. */
+/* ------------------------------------------------------------ the ink */
+
+/* Pencil, pressed harder for a heading than for body copy. Nothing here is a
+   different colour family; it is the same graphite at three pressures. */
 .paper h1,
-.paper .graphite {
-  /* Soft graphite rather than ink, and short of full density so the sheet
-     reads through the stroke. */
-  color: #5b5852;
-  opacity: 0.92;
+.paper h2,
+.paper h3 {
+  color: var(--line-strong);
+  letter-spacing: -0.01em;
 }
+.paper body {
+  color: var(--line);
+}
+.paper .text-muted-foreground {
+  color: var(--line-soft);
+}
+
+/* Pen and marker: what "bold" and "accent" become. */
+.paper strong,
+.paper b {
+  color: var(--line-bright);
+}
+.paper .text-accent,
+.paper .text-primary {
+  color: var(--marker);
+}
+
+/* --------------------------------------------------- nothing is a panel */
+
+/*
+ * A box on paper is an outline. It has no fill, no corner radius, and casts
+ * nothing, because there is no third dimension to cast into.
+ */
+/*
+ * Panels only. A button is a control the reader is meant to press, not a
+ * surface invented to group things, so it keeps its fill — stripping it leaves
+ * the primary action on a form invisible against the sheet.
+ */
+.paper :is([class*="bg-card"], [class*="bg-muted"], [class*="bg-secondary"], [class*="bg-background"], [class*="bg-accent"], [class*="bg-primary"]):not(
+    button,
+    [role="button"],
+    a[class*="bg-primary"]
+  ) {
+  background-color: transparent;
+}
+.paper [class*="rounded"] {
+  border-radius: 0;
+}
+.paper [class*="shadow"] {
+  box-shadow: none;
+}
+
+/*
+ * A box is drawn around the content, not laid out under it.
+ *
+ * The outline lives on a pseudo-element for one reason: the wobble has to stay
+ * on the rectangle. Filtering the box itself displaces everything inside it,
+ * and a paragraph run through a several-pixel displacement map is unreadable.
+ * Off the element, the line can wander as much as a hand does while the text
+ * sits perfectly still.
+ *
+ * `[class~="border"]` is deliberate — it matches only the all-sides utility, so
+ * a `border-b` under the navbar stays a single rule instead of sprouting three
+ * more sides.
+ */
+.paper :is(a, article, div, li, section)[class~="border"] {
+  position: relative;
+  border: 0;
+}
+.paper :is(a, article, div, li, section)[class~="border"]::before {
+  content: "";
+  position: absolute;
+  /* Pulled in rather than pushed out. A drawn line wanders several pixels, so
+     an outline starting at the edge of its cell meets its neighbour and the row
+     reads as one ruled table. */
+  inset: 2px 9px;
+  border: 1px solid var(--line-soft);
+  filter: url(#box-a);
+  pointer-events: none;
+}
+
+/*
+ * No two boxes on a page come out the same. Keyed off the wrapper's index so
+ * siblings in a grid each get a different hand; anything standing on its own
+ * keeps the first.
+ */
+.paper :nth-child(3n + 2) > :is(a, article, div, section)[class~="border"]::before {
+  filter: url(#box-b);
+  /* Nobody draws two boxes that start and stop on the same line. Sharing a top
+     edge with its neighbour is what made a row of these read as a table. */
+  inset: 6px 11px 0;
+}
+.paper :nth-child(3n + 3) > :is(a, article, div, section)[class~="border"]::before {
+  filter: url(#box-c);
+  inset: 0 8px 5px;
+}
+
+/* Anything still drawing a line is graphite, not a hairline of UI grey. */
+.paper [class*="border"],
+.paper button,
+.paper input,
+.paper textarea {
+  border-color: var(--line-soft);
+}
+.paper [class*="border-b"],
+.paper [class*="border-t"],
+.paper button,
+.paper input,
+.paper textarea {
+  filter: url(#pencil-xs);
+}
+
+/* A page cannot lift off a sheet. Hover changes the ink, nothing else. */
+.paper [class*="hover:-translate"]:hover,
+.paper [class*="hover:scale"]:hover {
+  transform: none;
+}
+.paper [class*="transition"] {
+  transition-property: color, border-color, opacity;
+}
+
+/* --------------------------------------------------- only lines are drawn */
+
+/*
+ * Drawn treatment applies to rules and outlines, never to type. A letterform
+ * run through a displacement map is a font wearing a costume, and it reads as
+ * one at every size; the sheet does not need the text to pretend it was
+ * handwritten in order to be a sheet.
+ */
+.paper hr {
+  filter: url(#pencil-xs);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .paper h1,
-  .paper h2,
-  .paper .graphite,
-  .paper .graphite-sm {
+  .paper hr,
+  .paper button,
+  .paper input,
+  .paper textarea,
+  .paper [class*="border-b"],
+  .paper [class*="border-t"],
+  .paper :is(a, article, div, li, section)[class~="border"]::before {
     filter: none;
-    mix-blend-mode: normal;
   }
 }

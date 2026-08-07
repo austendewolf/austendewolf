@@ -1,41 +1,74 @@
 import { NextResponse } from "next/server";
+import type { EmailOtpType } from "@supabase/supabase-js";
+
 import { isAllowed } from "@/lib/auth/allowlist";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
 /**
- * Completes a GitHub sign-in.
+ * Where a one-time sign-in link lands.
  *
- * GitHub will authenticate anyone, so the session is only kept if the address
- * behind it is on this site's allowlist. Anyone else is signed straight back
- * out, so an unwanted account never holds a usable session.
+ * Supabase can deliver the same link in two shapes depending on how the project
+ * is configured, and which one arrives is not under this site's control:
+ *
+ *   code        the PKCE flow. Supabase verified the token on its own domain
+ *               and handed back an authorisation code to exchange.
+ *   token_hash  the older verification flow, where this route does the verify.
+ *
+ * Both are handled, because a project setting changing underneath the site
+ * should not silently break the only way in.
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const code = url.searchParams.get("code");
-  const next = url.searchParams.get("next") ?? "/";
+  const next = safeNext(url.searchParams.get("next"));
 
-  if (!code) return NextResponse.redirect(new URL(next, url.origin));
+  const code = url.searchParams.get("code");
+  const tokenHash = url.searchParams.get("token_hash");
+  const type = url.searchParams.get("type") as EmailOtpType | null;
 
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
-  if (error) {
-    return NextResponse.redirect(
-      new URL(`/login?error=${encodeURIComponent(error.message)}`, url.origin),
-    );
-  }
+  const result = code
+    ? await supabase.auth.exchangeCodeForSession(code)
+    : tokenHash && type
+      ? await supabase.auth.verifyOtp({ token_hash: tokenHash, type })
+      : null;
 
-  if (!isAllowed(data.user?.email)) {
+  if (!result) return reject(url, "That sign-in link is not valid.");
+  if (result.error) return reject(url, linkError(result.error.message));
+
+  /*
+   * The link proves control of an inbox, not permission to be here. Supabase
+   * will issue a session for any of the accounts in this shared project, so the
+   * address is checked again and an unwanted one is signed straight back out
+   * rather than left holding a working session.
+   */
+  if (!isAllowed(result.data.user?.email)) {
     await supabase.auth.signOut();
-    return NextResponse.redirect(
-      new URL(
-        `/login?error=${encodeURIComponent("This site is private. That account is not permitted to sign in.")}`,
-        url.origin,
-      ),
-    );
+    return reject(url, "This site is private. That account cannot sign in here.");
   }
 
   return NextResponse.redirect(new URL(next, url.origin));
+}
+
+/**
+ * An expired or reused link is the common case and has a real remedy, so it
+ * says so. Everything else stays generic.
+ */
+function linkError(message: string): string {
+  return /expired|invalid|already/i.test(message)
+    ? "That link has expired or was already used. Request a new one."
+    : "That sign-in link is not valid.";
+}
+
+function reject(url: URL, message: string) {
+  return NextResponse.redirect(
+    new URL(`/login?error=${encodeURIComponent(message)}`, url.origin),
+  );
+}
+
+/** Only ever continue to somewhere on this site. */
+function safeNext(next: string | null): string {
+  return next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
 }

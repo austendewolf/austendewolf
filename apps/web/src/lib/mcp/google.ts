@@ -158,8 +158,18 @@ interface DocTextRun {
 interface DocElement {
   startIndex?: number;
   endIndex?: number;
-  paragraph?: { elements?: DocTextRun[] };
-  table?: { tableRows?: Array<{ tableCells?: Array<{ content?: DocElement[] }> }> };
+  paragraph?: {
+    elements?: DocTextRun[];
+    /* Restructuring needs to see shape, not just text: which paragraphs are
+       headings, which are already list items, how big a table is. */
+    paragraphStyle?: { namedStyleType?: string };
+    bullet?: { listId?: string; nestingLevel?: number };
+  };
+  table?: {
+    rows?: number;
+    columns?: number;
+    tableRows?: Array<{ tableCells?: Array<{ content?: DocElement[] }> }>;
+  };
 }
 
 /** Flatten a document to plain text plus a per-character index map. */
@@ -210,6 +220,130 @@ async function locate(
     end: indices[at + anchor.length - 1] + 1,
     total: hits.length,
   };
+}
+
+/**
+ * Resolve an anchor string to the table cell that contains it.
+ *
+ * Row operations need the table's own start index, which `locate` cannot give
+ * because it only knows character offsets into the flattened text. This walks
+ * tables in document order and reports the cell the anchor sits in, so callers
+ * still address structure by the text they can see. Throws if the anchor is not
+ * inside a table.
+ */
+async function locateTable(
+  acct: string,
+  documentId: string,
+  anchor: string,
+  occurrence: number,
+): Promise<{
+  tableStartIndex: number;
+  tableEndIndex: number;
+  rowIndex: number;
+  columnIndex: number;
+  rows: number;
+  columns: number;
+  total: number;
+}> {
+  const doc = await api<{ body?: { content?: DocElement[] } }>(
+    acct,
+    "GET",
+    `${DOCS}/${seg(documentId)}`,
+  );
+  const hits: Array<{
+    tableStartIndex: number;
+    tableEndIndex: number;
+    rowIndex: number;
+    columnIndex: number;
+    rows: number;
+    columns: number;
+  }> = [];
+  const walk = (elements: DocElement[]) => {
+    for (const el of elements) {
+      const table = el.table;
+      if (!table || el.startIndex === undefined || el.endIndex === undefined) continue;
+      const tableRows = table.tableRows ?? [];
+      for (let r = 0; r < tableRows.length; r++) {
+        const cells = tableRows[r].tableCells ?? [];
+        for (let c = 0; c < cells.length; c++) {
+          const content = cells[c].content ?? [];
+          const { text } = flattenDoc(content);
+          for (let at = text.indexOf(anchor); at !== -1; at = text.indexOf(anchor, at + 1)) {
+            hits.push({
+              tableStartIndex: el.startIndex,
+              tableEndIndex: el.endIndex,
+              rowIndex: r,
+              columnIndex: c,
+              rows: table.rows ?? tableRows.length,
+              columns: table.columns ?? cells.length,
+            });
+          }
+          walk(content);
+        }
+      }
+    }
+  };
+  walk(doc.body?.content ?? []);
+  if (!hits.length) {
+    throw new Error(`anchor text not found inside any table: ${JSON.stringify(anchor)}`);
+  }
+  if (occurrence < 1 || occurrence > hits.length) {
+    throw new Error(
+      `occurrence ${occurrence} out of range: ${hits.length} match(es) found in tables`,
+    );
+  }
+  return { ...hits[occurrence - 1], total: hits.length };
+}
+
+/** Summarise a document's structure: headings, tables, and bulleted runs. */
+function outlineDoc(content: DocElement[]): Array<Record<string, unknown>> {
+  const out: Array<Record<string, unknown>> = [];
+  const walk = (elements: DocElement[], depth: number) => {
+    for (const el of elements) {
+      if (el.paragraph) {
+        const text = (el.paragraph.elements ?? [])
+          .map((run) => run.textRun?.content ?? "")
+          .join("")
+          .replace(/\n+$/, "");
+        const style = el.paragraph.paragraphStyle?.namedStyleType ?? "NORMAL_TEXT";
+        const bullet = el.paragraph.bullet;
+        if (!text.trim() && !bullet) continue;
+        if (style.startsWith("HEADING") || style === "TITLE" || style === "SUBTITLE") {
+          out.push({ kind: "heading", style, text, start: el.startIndex, end: el.endIndex, depth });
+        } else if (bullet) {
+          out.push({
+            kind: "list_item",
+            text,
+            list_id: bullet.listId,
+            nesting_level: bullet.nestingLevel ?? 0,
+            start: el.startIndex,
+            end: el.endIndex,
+            depth,
+          });
+        }
+      }
+      if (el.table) {
+        const tableRows = el.table.tableRows ?? [];
+        const preview = (tableRows[0]?.tableCells ?? []).map((cell) =>
+          flattenDoc(cell.content ?? []).text.replace(/\n+/g, " ").trim().slice(0, 40),
+        );
+        out.push({
+          kind: "table",
+          rows: el.table.rows ?? tableRows.length,
+          columns: el.table.columns ?? (tableRows[0]?.tableCells ?? []).length,
+          first_row: preview,
+          start: el.startIndex,
+          end: el.endIndex,
+          depth,
+        });
+        for (const row of tableRows) {
+          for (const cell of row.tableCells ?? []) walk(cell.content ?? [], depth + 1);
+        }
+      }
+    }
+  };
+  walk(content, 0);
+  return out;
 }
 
 export interface ToolDefinition {
@@ -558,6 +692,364 @@ export const TOOLS: ToolDefinition[] = [
         body: { requests: [{ insertText: { location: { index }, text: String(a.text) } }] },
       });
       return { inserted_at: index, position: a.position ?? "after", anchor: a.anchor };
+    },
+  },
+  {
+    name: "docs_get_structure",
+    description:
+      "Outline a Google Doc's structure: headings, tables with their dimensions and first-row preview, " +
+      "and existing bulleted list items. Read this before restructuring so anchors are chosen against " +
+      "what is actually there.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        account,
+        document_id: { type: "string" },
+      },
+      required: ["account", "document_id"],
+    },
+    run: async (a) => {
+      const acct = String(a.account);
+      const id = String(a.document_id);
+      const doc = await api<{ title?: string; body?: { content?: DocElement[] } }>(
+        acct,
+        "GET",
+        `${DOCS}/${seg(id)}`,
+      );
+      const outline = outlineDoc(doc.body?.content ?? []);
+      return {
+        title: doc.title,
+        document_id: id,
+        counts: {
+          headings: outline.filter((e) => e.kind === "heading").length,
+          tables: outline.filter((e) => e.kind === "table").length,
+          list_items: outline.filter((e) => e.kind === "list_item").length,
+        },
+        outline,
+      };
+    },
+  },
+  {
+    name: "docs_format_bullets",
+    description:
+      "Turn the paragraphs between two exact anchor strings into a bulleted or numbered list, or strip " +
+      "bullet formatting off them. Anchors on the text itself, so no index math. Use this to convert a " +
+      "run of plain paragraphs into real list items without rewriting the document.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        account,
+        document_id: { type: "string" },
+        start_anchor: { type: "string", description: "Exact text in the first paragraph of the range" },
+        end_anchor: {
+          type: "string",
+          description:
+            "Exact text in the last paragraph of the range. Omit to affect only the start paragraph.",
+        },
+        preset: {
+          type: "string",
+          enum: [
+            "BULLET_DISC_CIRCLE_SQUARE",
+            "BULLET_ARROW_DIAMOND_DISC",
+            "BULLET_STAR_CIRCLE_SQUARE",
+            "BULLET_CHECKBOX",
+            "NUMBERED_DECIMAL_ALPHA_ROMAN",
+            "NUMBERED_DECIMAL_NESTED",
+          ],
+          default: "BULLET_DISC_CIRCLE_SQUARE",
+        },
+        remove: { type: "boolean", default: false, description: "Strip bullets instead of applying them" },
+        start_occurrence: { type: "integer", default: 1 },
+        end_occurrence: { type: "integer", default: 1 },
+        dry_run: { type: "boolean", default: false },
+      },
+      required: ["account", "document_id", "start_anchor"],
+    },
+    run: async (a) => {
+      requireWrites("docs_format_bullets");
+      const acct = String(a.account);
+      const id = String(a.document_id);
+      const from = await locate(acct, id, String(a.start_anchor), Number(a.start_occurrence ?? 1));
+      const to =
+        a.end_anchor === undefined
+          ? from
+          : await locate(acct, id, String(a.end_anchor), Number(a.end_occurrence ?? 1));
+      if (to.end < from.start) {
+        throw new Error("end_anchor resolves before start_anchor; check the order of the anchors");
+      }
+      const range = { startIndex: from.start, endIndex: to.end };
+      const remove = Boolean(a.remove);
+      const preset = String(a.preset ?? "BULLET_DISC_CIRCLE_SQUARE");
+      if (a.dry_run) {
+        return {
+          would: remove ? "remove_bullets" : "apply_bullets",
+          preset: remove ? null : preset,
+          range,
+          applied: false,
+        };
+      }
+      await api(acct, "POST", `${DOCS}/${seg(id)}:batchUpdate`, {
+        body: {
+          requests: [
+            remove
+              ? { deleteParagraphBullets: { range } }
+              : { createParagraphBullets: { range, bulletPreset: preset } },
+          ],
+        },
+      });
+      return {
+        action: remove ? "removed_bullets" : "applied_bullets",
+        preset: remove ? null : preset,
+        range,
+        applied: true,
+      };
+    },
+  },
+  {
+    name: "docs_insert_table_row",
+    description:
+      "Insert a row into a Google Doc table, above or below the row containing an exact anchor string. " +
+      "The anchor must be text inside the table.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        account,
+        document_id: { type: "string" },
+        anchor: { type: "string", description: "Exact text inside the reference row" },
+        position: { type: "string", enum: ["above", "below"], default: "below" },
+        occurrence: { type: "integer", default: 1, description: "1-based, counting matches inside tables" },
+      },
+      required: ["account", "document_id", "anchor"],
+    },
+    run: async (a) => {
+      requireWrites("docs_insert_table_row");
+      const acct = String(a.account);
+      const id = String(a.document_id);
+      const cell = await locateTable(acct, id, String(a.anchor), Number(a.occurrence ?? 1));
+      const below = String(a.position ?? "below") !== "above";
+      await api(acct, "POST", `${DOCS}/${seg(id)}:batchUpdate`, {
+        body: {
+          requests: [
+            {
+              insertTableRow: {
+                tableCellLocation: {
+                  tableStartLocation: { index: cell.tableStartIndex },
+                  rowIndex: cell.rowIndex,
+                  columnIndex: cell.columnIndex,
+                },
+                insertBelow: below,
+              },
+            },
+          ],
+        },
+      });
+      return {
+        inserted: below ? "below" : "above",
+        reference_row: cell.rowIndex,
+        table_start: cell.tableStartIndex,
+        rows_before: cell.rows,
+        applied: true,
+      };
+    },
+  },
+  {
+    name: "docs_delete_table_row",
+    description:
+      "Delete the table row containing an exact anchor string. Destructive, so set dry_run first to " +
+      "confirm which row resolves.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        account,
+        document_id: { type: "string" },
+        anchor: { type: "string", description: "Exact text inside the row to delete" },
+        occurrence: { type: "integer", default: 1, description: "1-based, counting matches inside tables" },
+        dry_run: { type: "boolean", default: false },
+      },
+      required: ["account", "document_id", "anchor"],
+    },
+    run: async (a) => {
+      requireWrites("docs_delete_table_row");
+      const acct = String(a.account);
+      const id = String(a.document_id);
+      const cell = await locateTable(acct, id, String(a.anchor), Number(a.occurrence ?? 1));
+      if (a.dry_run) {
+        return {
+          would_delete_row: cell.rowIndex,
+          table_start: cell.tableStartIndex,
+          rows: cell.rows,
+          applied: false,
+        };
+      }
+      await api(acct, "POST", `${DOCS}/${seg(id)}:batchUpdate`, {
+        body: {
+          requests: [
+            {
+              deleteTableRow: {
+                tableCellLocation: {
+                  tableStartLocation: { index: cell.tableStartIndex },
+                  rowIndex: cell.rowIndex,
+                  columnIndex: cell.columnIndex,
+                },
+              },
+            },
+          ],
+        },
+      });
+      return {
+        deleted_row: cell.rowIndex,
+        table_start: cell.tableStartIndex,
+        rows_before: cell.rows,
+        applied: true,
+      };
+    },
+  },
+  {
+    name: "docs_insert_table",
+    description:
+      "Insert a table into a Google Doc immediately before or after an exact anchor string, optionally " +
+      "filling its cells. Give `cells` as an array of rows; `rows` and `columns` are inferred from it if " +
+      "omitted. An empty table cannot be filled afterwards, because every other tool addresses text by " +
+      "anchor and empty cells contain none.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        account,
+        document_id: { type: "string" },
+        anchor: { type: "string", description: "Exact existing text to position the table against" },
+        cells: {
+          type: "array",
+          description: "Row-major contents, e.g. [[\"Name\",\"Owner\"],[\"Estimates\",\"Austen\"]]",
+          items: { type: "array", items: { type: "string" } },
+        },
+        rows: { type: "integer", description: "Rows, at least 1. Inferred from `cells` when given." },
+        columns: { type: "integer", description: "Columns, at least 1. Inferred from `cells` when given." },
+        position: { type: "string", enum: ["before", "after"], default: "after" },
+        occurrence: { type: "integer", default: 1 },
+      },
+      required: ["account", "document_id", "anchor"],
+    },
+    run: async (a) => {
+      requireWrites("docs_insert_table");
+      const acct = String(a.account);
+      const id = String(a.document_id);
+
+      const cells = Array.isArray(a.cells)
+        ? (a.cells as unknown[]).map((row) =>
+            Array.isArray(row) ? row.map((cell) => String(cell ?? "")) : [String(row ?? "")],
+          )
+        : null;
+      const rows = Number(a.rows ?? cells?.length ?? 0);
+      const columns = Number(
+        a.columns ?? (cells ? Math.max(...cells.map((r) => r.length)) : 0),
+      );
+      if (!Number.isInteger(rows) || rows < 1 || !Number.isInteger(columns) || columns < 1) {
+        throw new Error("give `cells`, or rows and columns as integers of at least 1");
+      }
+
+      const at = await locate(acct, id, String(a.anchor), Number(a.occurrence ?? 1));
+      const index = String(a.position ?? "after") === "before" ? at.start : at.end;
+      await api(acct, "POST", `${DOCS}/${seg(id)}:batchUpdate`, {
+        body: { requests: [{ insertTable: { location: { index }, rows, columns } }] },
+      });
+      if (!cells) {
+        return { inserted_at: index, rows, columns, position: a.position ?? "after", filled: false };
+      }
+
+      /*
+       * Cell indices are only knowable after the table exists, so the fill is a
+       * second pass. The writes go in descending index order: the API applies
+       * requests sequentially, and inserting text shifts everything after it,
+       * so working backwards keeps every index we computed still valid.
+       */
+      const doc = await api<{ body?: { content?: DocElement[] } }>(
+        acct,
+        "GET",
+        `${DOCS}/${seg(id)}`,
+      );
+      const table = (doc.body?.content ?? []).find(
+        (el) => el.table && el.startIndex !== undefined && el.startIndex >= index,
+      );
+      if (!table?.table) throw new Error("table was inserted but could not be found to fill");
+
+      const writes: Array<{ index: number; text: string }> = [];
+      const tableRows = table.table.tableRows ?? [];
+      for (let r = 0; r < tableRows.length && r < cells.length; r++) {
+        const rowCells = tableRows[r].tableCells ?? [];
+        for (let c = 0; c < rowCells.length && c < cells[r].length; c++) {
+          const text = cells[r][c];
+          const start = rowCells[c].content?.[0]?.startIndex;
+          if (text && start !== undefined) writes.push({ index: start, text });
+        }
+      }
+      writes.sort((x, y) => y.index - x.index);
+
+      if (writes.length) {
+        await api(acct, "POST", `${DOCS}/${seg(id)}:batchUpdate`, {
+          body: {
+            requests: writes.map((w) => ({
+              insertText: { location: { index: w.index }, text: w.text },
+            })),
+          },
+        });
+      }
+      return {
+        inserted_at: index,
+        rows,
+        columns,
+        position: a.position ?? "after",
+        filled: writes.length,
+      };
+    },
+  },
+  {
+    name: "docs_delete_table",
+    description:
+      "Delete the entire table containing an exact anchor string. Destructive and removes every cell, so " +
+      "set dry_run first to confirm the table that resolves.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        account,
+        document_id: { type: "string" },
+        anchor: { type: "string", description: "Exact text inside the table to delete" },
+        occurrence: { type: "integer", default: 1, description: "1-based, counting matches inside tables" },
+        dry_run: { type: "boolean", default: false },
+      },
+      required: ["account", "document_id", "anchor"],
+    },
+    run: async (a) => {
+      requireWrites("docs_delete_table");
+      const acct = String(a.account);
+      const id = String(a.document_id);
+      const cell = await locateTable(acct, id, String(a.anchor), Number(a.occurrence ?? 1));
+      if (a.dry_run) {
+        return {
+          would_delete_table_at: cell.tableStartIndex,
+          rows: cell.rows,
+          columns: cell.columns,
+          applied: false,
+        };
+      }
+      // There is no `deleteTable` request in the Docs v1 API. Removing the
+      // table's whole content range is the documented way to drop one.
+      await api(acct, "POST", `${DOCS}/${seg(id)}:batchUpdate`, {
+        body: {
+          requests: [
+            {
+              deleteContentRange: {
+                range: { startIndex: cell.tableStartIndex, endIndex: cell.tableEndIndex },
+              },
+            },
+          ],
+        },
+      });
+      return {
+        deleted_table_at: cell.tableStartIndex,
+        rows: cell.rows,
+        columns: cell.columns,
+        applied: true,
+      };
     },
   },
   {

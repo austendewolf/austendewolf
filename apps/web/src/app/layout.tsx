@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { Architects_Daughter, Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 import { GraphiteFilter } from "@/components/graphite-filter";
+import { SheetBackdrop, SheetFrame } from "@/components/sheet-backdrop";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,20 +15,6 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
-});
-
-/**
- * The hand for drawn headings.
- *
- * Architects Daughter is drafting-hand printing: every letter stands on its
- * own, nothing joins, and it reads as lettering rather than script. That is
- * what keeps it out of cursive territory while still being unmistakably
- * written by a person.
- */
-const hand = Architects_Daughter({
-  variable: "--font-hand",
-  subsets: ["latin"],
-  weight: "400",
 });
 
 /**
@@ -59,13 +46,16 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${hand.variable} ${THEME} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${THEME} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <GraphiteFilter />
+        <SheetBackdrop />
         <Navbar />
         <main className="flex-1">{children}</main>
         <Footer />
+        {/* Last: the margin and its key print over the drawing, not under it. */}
+        <SheetFrame />
         <Toaster richColors theme="dark" />
       </body>
     </html>

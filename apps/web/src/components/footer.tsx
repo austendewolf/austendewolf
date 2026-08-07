@@ -22,12 +22,13 @@ const SOCIALS = [
 
 export function Footer() {
   return (
-    <footer className="border-t border-border/40 mt-24">
-      <div className="mx-auto flex max-w-5xl flex-col items-start justify-between gap-4 px-6 py-8 sm:flex-row sm:items-center">
-        <p className="font-mono text-xs text-muted-foreground">
-          © {new Date().getFullYear()} austendewolf.com
-        </p>
-        <ul className="flex gap-4">
+    // Template, so it prints in the margin band below the border rather than
+    // inside the drawing area.
+    <footer className="sheet-band sheet-band-bottom">
+      <p className="text-xs text-muted-foreground">
+        © {new Date().getFullYear()} austendewolf.com
+      </p>
+      <ul className="flex gap-4">
           {SOCIALS.map(({ href, label, Icon }) => (
             <li key={href}>
               <a
@@ -42,7 +43,6 @@ export function Footer() {
             </li>
           ))}
         </ul>
-      </div>
     </footer>
   );
 }

@@ -1,22 +1,30 @@
 /**
  * Who may hold a session on this site.
  *
- * Sign-in goes through GitHub, which means anyone on GitHub could otherwise
- * authenticate here. This site is personal, so sign-in is restricted to an
- * explicit list of addresses.
+ * The Supabase project behind this site is shared with other products, and it
+ * holds accounts that have nothing to do with this one — including strangers
+ * who signed up through a different site on the same project. Any of them can
+ * present a valid credential to this project's auth server, so "Supabase says
+ * this is a real user" is not the question worth asking. This list is.
  *
- * The Supabase project is shared with other sites, so this has to be enforced
- * in the application rather than in the project's auth settings.
+ * That is also why it cannot live in the project's auth settings: those apply
+ * to every site on the project, so the rule has to be enforced here.
  *
- * It fails closed: with the variable unset nobody is allowed, so a
- * misconfigured deploy locks sign-in rather than opening it to everyone.
+ * The owner is a constant rather than required configuration. This site has one
+ * user and their address is not a secret — making it an environment variable
+ * only created a way for the site to ship with sign-in silently bricked, which
+ * is exactly what happened. `ALLOWED_EMAILS` still overrides it when set.
  */
 
+const OWNER = "91.adewolf@gmail.com";
+
 export function allowedEmails(): string[] {
-  return (process.env.ALLOWED_EMAILS ?? process.env.MCP_OWNER_EMAILS ?? "")
+  const configured = (process.env.ALLOWED_EMAILS ?? process.env.MCP_OWNER_EMAILS ?? "")
     .split(",")
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
+
+  return configured.length > 0 ? configured : [OWNER];
 }
 
 export function isAllowed(email: string | null | undefined): boolean {

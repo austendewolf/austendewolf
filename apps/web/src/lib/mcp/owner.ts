@@ -1,4 +1,4 @@
-import { allowedEmails, isAllowed } from "@/lib/auth/allowlist";
+import { isAllowed } from "@/lib/auth/allowlist";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -14,8 +14,6 @@ export interface Viewer {
   signedIn: boolean;
   isOwner: boolean;
   email: string | null;
-  /** True when no allowlist is configured, which is a deploy problem. */
-  misconfigured: boolean;
 }
 
 export async function getViewer(): Promise<Viewer> {
@@ -23,12 +21,10 @@ export async function getViewer(): Promise<Viewer> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const owners = allowedEmails();
   return {
     signedIn: Boolean(user),
     isOwner: isAllowed(user?.email),
     email: user?.email ?? null,
-    misconfigured: owners.length === 0,
   };
 }
 

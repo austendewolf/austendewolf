@@ -1,7 +1,13 @@
 import { timingSafeEqual } from "node:crypto";
 
 import { listAccounts } from "@/lib/mcp/accounts";
+import { ADMIN_TOOLS } from "@/lib/mcp/admin";
 import { TOOLS } from "@/lib/mcp/google";
+import { resolveUpstream, upstreamTools } from "@/lib/mcp/registry";
+import { GATEWAY_HEADER } from "@/lib/mcp/upstream";
+
+// Google APIs plus the tools that manage this server's own connections.
+const ALL_TOOLS = [...TOOLS, ...ADMIN_TOOLS];
 
 // Route handlers are uncached by default in this version, and only GET can opt
 // in, so POST needs no cache configuration. `runtime` is still a valid segment
@@ -49,7 +55,12 @@ const toolResult = (payload: unknown, isError = false) => ({
   isError,
 });
 
-async function dispatch(method: string, params: Record<string, unknown>): Promise<unknown | null> {
+async function dispatch(
+  method: string,
+  params: Record<string, unknown>,
+  /** False when the caller is itself a gateway, to stop a cycle expanding. */
+  includeUpstreams: boolean,
+): Promise<unknown | null> {
   switch (method) {
     case "initialize":
       return {
@@ -60,23 +71,45 @@ async function dispatch(method: string, params: Record<string, unknown>): Promis
     case "ping":
       return {};
     case "tools/list": {
-      const accounts = (await listAccounts()).map((a) => a.name);
+      // Remote tools are fetched alongside the local ones. An upstream that is
+      // down contributes an empty list rather than failing the request.
+      const [accounts, remote] = await Promise.all([
+        listAccounts().then((list) => list.map((a) => a.name)),
+        includeUpstreams ? upstreamTools().catch(() => []) : [],
+      ]);
       return {
-        tools: TOOLS.map((t) => ({
-          name: t.name,
-          description: t.description,
-          // Advertise the accounts that actually exist, so a caller does not
-          // have to guess the handle.
-          inputSchema: withAccountEnum(t.inputSchema, accounts),
-        })),
+        tools: [
+          ...ALL_TOOLS.map((t) => ({
+            name: t.name,
+            description: t.description,
+            // Advertise the accounts that actually exist, so a caller does not
+            // have to guess the handle.
+            inputSchema: withAccountEnum(t.inputSchema, accounts),
+          })),
+          ...remote,
+        ],
       };
     }
     case "tools/call": {
       const name = String(params.name ?? "");
-      const tool = TOOLS.find((t) => t.name === name);
-      if (!tool) return toolResult(`unknown tool: ${name}`, true);
+      const args = (params.arguments as Record<string, unknown>) ?? {};
+
+      const tool = ALL_TOOLS.find((t) => t.name === name);
+      if (tool) {
+        try {
+          return toolResult(await tool.run(args));
+        } catch (err) {
+          return toolResult(err instanceof Error ? err.message : String(err), true);
+        }
+      }
+
+      // A dot means the tool lives on a fronted server.
       try {
-        return toolResult(await tool.run((params.arguments as Record<string, unknown>) ?? {}));
+        const routed = await resolveUpstream(name);
+        if (!routed) return toolResult(`unknown tool: ${name}`, true);
+        // Upstreams already answer in MCP tool-result shape; pass it straight
+        // through rather than re-wrapping a result that is already correct.
+        return await routed.upstream.call(routed.tool, args);
       } catch (err) {
         return toolResult(err instanceof Error ? err.message : String(err), true);
       }
@@ -125,7 +158,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const result = await dispatch(message.method ?? "", message.params ?? {});
+  const result = await dispatch(
+    message.method ?? "",
+    message.params ?? {},
+    !request.headers.get(GATEWAY_HEADER),
+  );
 
   // A notification carries no id and expects no body.
   if (message.id === undefined) return new Response(null, { status: 202 });

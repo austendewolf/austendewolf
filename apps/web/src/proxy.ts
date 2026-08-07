@@ -7,10 +7,10 @@ import { isAllowed } from "@/lib/auth/allowlist";
  * Keeps the Supabase session fresh, and enforces that only the site owner may
  * hold one.
  *
- * Sign-in is through GitHub, which authenticates anyone. The callback rejects
- * addresses that are not on the allowlist, and this is the second line: a
- * session belonging to anyone else is cleared on its next request, so a token
- * issued before the allowlist existed cannot keep working.
+ * The sign-in actions and the link callback both reject addresses that are not
+ * on the allowlist. This is the line behind them: a session belonging to anyone
+ * else is cleared on its next request, so a token minted before the allowlist
+ * existed — or before an address was taken off it — cannot keep working.
  *
  * Named `proxy` because the `middleware` file convention is deprecated in this
  * version of Next.
