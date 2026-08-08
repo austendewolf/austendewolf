@@ -376,8 +376,21 @@
     color: var(--line-strong);
   }
 
-  .paper .title-block-current .title-block-value {
-    color: var(--line-strong);
+  /*
+   * The account row carries two targets, which no other row does: the label
+   * opens the account, the value ends the session. So the row is a container
+   * and each half is its own control, rather than the whole row being one link.
+   */
+  .paper .title-block-form {
+    display: contents;
+  }
+  .paper .title-block-label-link,
+  .paper .title-block-value-action {
+    cursor: pointer;
+  }
+  .paper .title-block-label-link:hover,
+  .paper .title-block-value-action:hover {
+    color: var(--line-bright);
   }
 
   /*
@@ -498,11 +511,6 @@
     }
     .paper .title-block[data-open] .title-block-index {
       display: block;
-    }
-    /* Which sheet is on the board matters least when the list is collapsed,
-       and it is already named by the page itself. */
-    .paper .title-block-current {
-      display: none;
     }
   }
 
@@ -925,4 +933,22 @@
   .paper :is(a, article, div, li, section)[class~="border"]::before {
     filter: none;
   }
+}
+
+/*
+ * A status mark: a small filled square that takes its colour from the text
+ * beside it.
+ *
+ * Not a `bg-*` utility, deliberately. The paper treatment strips background
+ * colour from anything matching `bg-accent`, `bg-card` and the rest, on the
+ * grounds that a filled panel is not something that exists on a drawing. That
+ * is right for panels and wrong for a mark, so this fills from currentColor and
+ * never matches the strip rule. Unlayered, so a utility cannot outrank it.
+ */
+.status-mark {
+  display: inline-block;
+  width: 0.375rem;
+  height: 0.375rem;
+  background-color: currentColor;
+  flex: none;
 }

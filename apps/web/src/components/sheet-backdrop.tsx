@@ -1,3 +1,4 @@
+import { AccountBlock } from "@/components/account-block";
 import { TitleBlock } from "@/components/title-block";
 
 /**
@@ -40,9 +41,15 @@ export function SheetBackdrop() {
  */
 export function SheetFrame() {
   return (
-    <div aria-hidden className="sheet-frame-layer">
-      <div className="sheet-frame" />
-      <TitleBlock />
+    /*
+     * `aria-hidden` belongs on the ruled rectangle, not on the layer. The layer
+     * also carries the key, and the key is the site's navigation plus the way in
+     * and out of an account — hiding all of that from assistive technology to
+     * silence one decorative border is the wrong trade.
+     */
+    <div className="sheet-frame-layer">
+      <div aria-hidden className="sheet-frame" />
+      <TitleBlock account={<AccountBlock />} />
     </div>
   );
 }

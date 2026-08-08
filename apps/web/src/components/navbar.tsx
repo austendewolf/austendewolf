@@ -1,21 +1,14 @@
-import Link from "next/link";
-
 /**
- * The running head, in the margin band above the border.
+ * The top margin band.
  *
  * Template rather than drawing: it prints outside the frame, so everything
  * inside the border belongs to the sheet being viewed.
  *
- * Only the wordmark. The sheet index lives in the key at every width — it folds
- * into a row of the block on a narrow sheet rather than moving out here, so
- * there is never a second copy of the navigation to keep in step with it.
+ * Deliberately empty. It carried a wordmark, which repeated on every sheet what
+ * the key already states once, in the row that is literally the drawing's
+ * title. The band itself stays, because the margin it reserves is what the
+ * frame and the key are positioned against.
  */
 export function Navbar() {
-  return (
-    <header className="sheet-band sheet-band-top">
-      <Link href="/" className="sheet-wordmark">
-        austendewolf<span className="text-accent">.</span>com
-      </Link>
-    </header>
-  );
+  return <header className="sheet-band sheet-band-top" />;
 }

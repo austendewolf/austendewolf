@@ -14,11 +14,22 @@ const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 const STATE_TTL_MS = 10 * 60 * 1000;
 
+/**
+ * Everything the tools can ask for, and what a fresh consent requests.
+ *
+ * Every entry defaults on. An earlier version left the narrow read variants and
+ * all of Slides off, on the reasoning that full `drive` already covers the Docs,
+ * Sheets, and Slides APIs and a shorter consent screen is a smaller ask. That is
+ * true, and it made the checkbox panel misleading: an unchecked box next to a
+ * granted account reads as access that was refused rather than access that was
+ * never requested. Asking for the whole catalogue keeps the panel a description
+ * of the grant.
+ */
 export const SCOPE_CATALOG = [
   {
     service: "Gmail",
     scopes: [
-      { url: "https://www.googleapis.com/auth/gmail.readonly", label: "Read mail", default: false },
+      { url: "https://www.googleapis.com/auth/gmail.readonly", label: "Read mail", default: true },
       {
         url: "https://www.googleapis.com/auth/gmail.modify",
         label: "Read, label, and archive",
@@ -27,7 +38,7 @@ export const SCOPE_CATALOG = [
       {
         url: "https://www.googleapis.com/auth/gmail.settings.basic",
         label: "Manage filters",
-        default: false,
+        default: true,
       },
     ],
   },
@@ -39,7 +50,7 @@ export const SCOPE_CATALOG = [
         label: "Read events",
         default: true,
       },
-      { url: "https://www.googleapis.com/auth/calendar", label: "Full access", default: false },
+      { url: "https://www.googleapis.com/auth/calendar", label: "Full access", default: true },
     ],
   },
   {
@@ -48,7 +59,7 @@ export const SCOPE_CATALOG = [
       { url: "https://www.googleapis.com/auth/drive.readonly", label: "Read files", default: true },
       // Comments are a Drive concern, not a Docs one, and creating them needs
       // more than drive.readonly.
-      { url: "https://www.googleapis.com/auth/drive", label: "Full access", default: false },
+      { url: "https://www.googleapis.com/auth/drive", label: "Full access", default: true },
     ],
   },
   {
@@ -57,7 +68,7 @@ export const SCOPE_CATALOG = [
       {
         url: "https://www.googleapis.com/auth/documents.readonly",
         label: "Read documents",
-        default: false,
+        default: true,
       },
       {
         url: "https://www.googleapis.com/auth/documents",
@@ -72,7 +83,7 @@ export const SCOPE_CATALOG = [
       {
         url: "https://www.googleapis.com/auth/spreadsheets.readonly",
         label: "Read spreadsheets",
-        default: false,
+        default: true,
       },
       {
         url: "https://www.googleapis.com/auth/spreadsheets",
@@ -87,14 +98,12 @@ export const SCOPE_CATALOG = [
       {
         url: "https://www.googleapis.com/auth/presentations.readonly",
         label: "Read presentations",
-        default: false,
+        default: true,
       },
-      // Off by default: the Slides tools exist, but Docs and Sheets are the
-      // ones in use, and every extra scope widens the consent for no gain.
       {
         url: "https://www.googleapis.com/auth/presentations",
         label: "Read and edit presentations",
-        default: false,
+        default: true,
       },
     ],
   },

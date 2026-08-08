@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import { NAV_ITEMS, sheetFor } from "@/lib/nav";
+import { NAV_ITEMS } from "@/lib/nav";
 
 /**
  * The title block, top right, at every width.
@@ -21,10 +21,13 @@ import { NAV_ITEMS, sheetFor } from "@/lib/nav";
  * Where the sheet is too narrow to carry the whole index, the index folds into
  * a row of the key rather than moving somewhere else. The key never leaves the
  * corner; only the number of rows in it changes.
+ *
+ * `account` is a server-rendered slot. The key needs the session to know
+ * whether to offer a way in or a way out, and this component is client-side for
+ * the fold, so the rows arrive already rendered rather than being fetched here.
  */
-export function TitleBlock() {
+export function TitleBlock({ account }: { account?: React.ReactNode }) {
   const pathname = usePathname();
-  const sheet = sheetFor(pathname);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLElement>(null);
 
@@ -100,12 +103,7 @@ export function TitleBlock() {
         })}
       </ul>
 
-      {/* What is actually on the board, which may not be a listed sheet — a
-          project detail, or one of the access pages. */}
-      <div className="title-block-row title-block-current">
-        <span className="title-block-label">Sheet</span>
-        <span className="title-block-value">{sheet.label}</span>
-      </div>
+      {account}
     </nav>
   );
 }

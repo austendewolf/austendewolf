@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const origin = originFrom(request.headers);
   const back = (message: string, key: "connected" | "error") =>
-    Response.redirect(`${origin}/mcp?${key}=${encodeURIComponent(message)}`, 303);
+    Response.redirect(`${origin}/account?${key}=${encodeURIComponent(message)}`, 303);
 
   const denied = url.searchParams.get("error");
   if (denied) return back(`Google returned: ${denied}`, "error");

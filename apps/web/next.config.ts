@@ -3,6 +3,10 @@ import path from "node:path";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Stamped once, when the build runs. The footer prints this as the revision
+  // date, and it has to be frozen at build: the layout renders per request, so
+  // anything computed at render would just be "now".
+  env: { NEXT_PUBLIC_BUILD_DATE: new Date().toISOString() },
   outputFileTracingRoot: path.join(__dirname, "../../"),
   async rewrites() {
     return {

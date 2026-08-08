@@ -11,7 +11,7 @@ export async function connectAccount(formData: FormData) {
   await requireOwner();
   const account = String(formData.get("account") ?? "").trim().toLowerCase();
   if (!/^[a-z0-9_-]+$/.test(account)) {
-    redirect(`/mcp?error=${encodeURIComponent("pick a name using letters, digits, - or _")}`);
+    redirect(`/account?error=${encodeURIComponent("pick a name using letters, digits, - or _")}`);
   }
   const requested = formData.getAll("scope").map(String);
   // Reconnecting with nothing checked keeps whatever the account already has,
@@ -23,7 +23,7 @@ export async function connectAccount(formData: FormData) {
   try {
     destination = authorizeUrl(account, scopes);
   } catch (err) {
-    redirect(`/mcp?error=${encodeURIComponent(err instanceof Error ? err.message : String(err))}`);
+    redirect(`/account?error=${encodeURIComponent(err instanceof Error ? err.message : String(err))}`);
   }
   redirect(destination);
 }
@@ -34,7 +34,7 @@ export async function disconnectAccount(formData: FormData) {
   const account = String(formData.get("account") ?? "").trim();
   const existing = await getAccount(account);
   if (!existing) {
-    redirect(`/mcp?error=${encodeURIComponent(`no account named '${account}'`)}`);
+    redirect(`/account?error=${encodeURIComponent(`no account named '${account}'`)}`);
   }
   // Revoke first: forgetting locally without revoking would leave a live grant
   // on the Google account with nothing pointing at it.
@@ -43,5 +43,5 @@ export async function disconnectAccount(formData: FormData) {
   const suffix = revoked
     ? ""
     : `&error=${encodeURIComponent("Removed here, but Google did not confirm the revoke. Check myaccount.google.com/permissions.")}`;
-  redirect(`/mcp?removed=${encodeURIComponent(account)}${suffix}`);
+  redirect(`/account?removed=${encodeURIComponent(account)}${suffix}`);
 }
