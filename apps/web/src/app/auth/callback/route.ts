@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 
 import { isAllowed } from "@/lib/auth/allowlist";
+import { originFrom } from "@/lib/origin";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -21,6 +22,7 @@ export const runtime = "nodejs";
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
+  const origin = originFrom(request.headers);
   const next = safeNext(url.searchParams.get("next"));
 
   const code = url.searchParams.get("code");
@@ -35,8 +37,8 @@ export async function GET(request: Request) {
       ? await supabase.auth.verifyOtp({ token_hash: tokenHash, type })
       : null;
 
-  if (!result) return reject(url, "That sign-in link is not valid.");
-  if (result.error) return reject(url, linkError(result.error.message));
+  if (!result) return reject(origin, "That sign-in link is not valid.");
+  if (result.error) return reject(origin, linkError(result.error.message));
 
   /*
    * The link proves control of an inbox, not permission to be here. Supabase
@@ -46,10 +48,10 @@ export async function GET(request: Request) {
    */
   if (!isAllowed(result.data.user?.email)) {
     await supabase.auth.signOut();
-    return reject(url, "This site is private. That account cannot sign in here.");
+    return reject(origin, "This site is private. That account cannot sign in here.");
   }
 
-  return NextResponse.redirect(new URL(next, url.origin));
+  return NextResponse.redirect(new URL(next, origin));
 }
 
 /**
@@ -62,9 +64,9 @@ function linkError(message: string): string {
     : "That sign-in link is not valid.";
 }
 
-function reject(url: URL, message: string) {
+function reject(origin: string, message: string) {
   return NextResponse.redirect(
-    new URL(`/login?error=${encodeURIComponent(message)}`, url.origin),
+    new URL(`/login?error=${encodeURIComponent(message)}`, origin),
   );
 }
 

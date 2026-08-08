@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { isAllowed } from "@/lib/auth/allowlist";
 import { emailRedirectTo } from "@/lib/auth/brand";
+import { originFrom } from "@/lib/origin";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -108,20 +109,9 @@ export async function signOut() {
   redirect("/");
 }
 
-/**
- * Where the emailed link should come back to.
- *
- * Derived from the request rather than hard-coded, so a link requested from
- * localhost returns to localhost and one requested from the deployed site
- * returns there. `x-forwarded-*` is what the proxy in front of production sets;
- * `host` is what exists in development.
- */
+/** Where the emailed link should come back to. */
 async function siteOrigin(): Promise<string> {
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3100";
-  const proto =
-    h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  return `${proto}://${host}`;
+  return originFrom(await headers());
 }
 
 /**
