@@ -157,8 +157,17 @@
    * running head and the footer print in that band, outside the border, so
    * everything inside the frame belongs to the sheet being viewed.
    */
-  --sheet-margin-x: 1.5rem;
-  --sheet-margin-y: 3.25rem;
+  /*
+   * One margin, all four sides.
+   *
+   * The top and bottom used to be deeper than the sides because they carried
+   * the running head and the footer. The head is gone and the footer is a date,
+   * so the extra depth bought nothing and the sheet read as though it had been
+   * trimmed wrong. A drawing is trimmed square.
+   */
+  --sheet-margin: 2.5rem;
+  --sheet-margin-x: var(--sheet-margin);
+  --sheet-margin-y: var(--sheet-margin);
   /* Weight of every ruled line on the sheet, and what the key insets by so it
      nests inside the margin instead of printing over it. */
   --sheet-rule: 1px;
@@ -276,6 +285,77 @@
     left: var(--sheet-margin-x);
     right: var(--sheet-margin-x);
     border: var(--sheet-rule) solid rgb(255 255 255 / 0.42);
+  }
+
+  /*
+   * The scale ruled inside the border.
+   *
+   * A drawing sheet is graduated so anything on it can be measured off the
+   * print. The ticks sit inside the frame and read against it, which is also
+   * why they are fainter than the border itself: the border is the trim, the
+   * ticks are an annotation on it.
+   */
+  .paper .sheet-ticks {
+    position: absolute;
+    --tick: rgb(255 255 255 / 0.26);
+    --tick-gap: 1.25rem;
+  }
+  .paper .sheet-ticks-top,
+  .paper .sheet-ticks-bottom {
+    left: 0;
+    right: 0;
+    height: 0.3rem;
+    background-image: repeating-linear-gradient(
+      to right,
+      var(--tick) 0 1px,
+      transparent 1px var(--tick-gap)
+    );
+  }
+  .paper .sheet-ticks-top {
+    top: 0;
+  }
+  .paper .sheet-ticks-bottom {
+    bottom: 0;
+  }
+  .paper .sheet-ticks-left,
+  .paper .sheet-ticks-right {
+    top: 0;
+    bottom: 0;
+    width: 0.3rem;
+    background-image: repeating-linear-gradient(
+      to bottom,
+      var(--tick) 0 1px,
+      transparent 1px var(--tick-gap)
+    );
+  }
+  .paper .sheet-ticks-left {
+    left: 0;
+  }
+  .paper .sheet-ticks-right {
+    right: 0;
+  }
+
+  /*
+   * Registration marks, set in from the corner they belong to rather than on
+   * it, so the cross clears the border instead of colliding with it.
+   */
+  .paper .sheet-reg {
+    position: absolute;
+    fill: none;
+    stroke: rgb(255 255 255 / 0.42);
+    stroke-width: 1;
+  }
+  .paper .sheet-reg-tl {
+    top: 0.7rem;
+    left: 0.7rem;
+  }
+  .paper .sheet-reg-bl {
+    bottom: 0.7rem;
+    left: 0.7rem;
+  }
+  .paper .sheet-reg-br {
+    bottom: 0.7rem;
+    right: 0.7rem;
   }
 
   /*

@@ -48,9 +48,46 @@ export function SheetFrame() {
      * silence one decorative border is the wrong trade.
      */
     <div className="sheet-frame-layer">
-      <div aria-hidden className="sheet-frame" />
+      <div aria-hidden className="sheet-frame">
+        {/* Ruled inside every edge. Repeating gradients rather than elements,
+            so the count follows the viewport instead of being a fixed number
+            that runs out or crowds. */}
+        <span className="sheet-ticks sheet-ticks-top" />
+        <span className="sheet-ticks sheet-ticks-bottom" />
+        <span className="sheet-ticks sheet-ticks-left" />
+        <span className="sheet-ticks sheet-ticks-right" />
+
+        {/* Three corners, not four. The key closes the top right, and a
+            registration mark under it would be a target on a printed panel. */}
+        <RegistrationMark className="sheet-reg-tl" />
+        <RegistrationMark className="sheet-reg-bl" />
+        <RegistrationMark className="sheet-reg-br" />
+      </div>
       <TitleBlock account={<AccountBlock />} />
     </div>
+  );
+}
+
+/**
+ * A registration mark: the target a press lines each plate up against.
+ *
+ * Drawn rather than dotted in, because the cross has to run past the circle on
+ * all four sides — that overshoot is the whole point of the mark, and it is
+ * what stops it reading as a bullet.
+ */
+function RegistrationMark({ className }: { className: string }) {
+  return (
+    <svg
+      className={`sheet-reg ${className}`}
+      viewBox="0 0 18 18"
+      width="18"
+      height="18"
+      aria-hidden
+    >
+      <circle cx="9" cy="9" r="4.5" />
+      <line x1="9" y1="0" x2="9" y2="18" />
+      <line x1="0" y1="9" x2="18" y2="9" />
+    </svg>
   );
 }
 
