@@ -31,9 +31,16 @@ export function TitleBlock({ account }: { account?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLElement>(null);
 
-  // Opening a sheet should close the index behind it. Without this the menu
-  // stays open across a navigation and covers the drawing it just opened.
-  useEffect(() => setOpen(false), [pathname]);
+  // Opening a sheet should close the index behind it, or the menu stays open
+  // across a navigation and covers the drawing it just opened. Done as a
+  // during-render adjustment on a changed pathname rather than an effect: it is
+  // the pattern React documents for "reset state when a prop changes", and it
+  // avoids the extra commit-then-re-render an effect would add.
+  const [lastPath, setLastPath] = useState(pathname);
+  if (pathname !== lastPath) {
+    setLastPath(pathname);
+    setOpen(false);
+  }
 
   /*
    * An expanded index sits over the drawing, and on the resume it lands on the

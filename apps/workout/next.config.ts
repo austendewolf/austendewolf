@@ -16,10 +16,20 @@ const nextConfig: NextConfig = {
   // flag is an error rather than a no-op.
   serverExternalPackages: ["praetom"],
   async headers() {
-    return [
+    // Transport + sniffing protections everywhere; framing handled per-route.
+    const baseline = [
       {
-        // /embed/* can be framed by claude.ai. Everything else stays
-        // same-origin only.
+        key: "Strict-Transport-Security",
+        value: "max-age=63072000; includeSubDomains; preload",
+      },
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+    ];
+    return [
+      { source: "/:path*", headers: baseline },
+      {
+        // /embed/* is meant to be framed by claude.ai; it carries a scoped
+        // frame-ancestors allowlist and must NOT get X-Frame-Options DENY.
         source: "/embed/:path*",
         headers: [
           {
@@ -27,6 +37,14 @@ const nextConfig: NextConfig = {
             value:
               "frame-ancestors 'self' https://claude.ai https://*.claude.ai https://anthropic.com https://*.anthropic.com",
           },
+        ],
+      },
+      {
+        // Everything that is not /embed is first-party only.
+        source: "/((?!embed).*)",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
         ],
       },
     ];

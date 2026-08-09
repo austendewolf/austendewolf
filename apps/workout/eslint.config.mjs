@@ -3,38 +3,37 @@ import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 
 /**
- * Same base as apps/web, with a documented amnesty.
+ * Same base as apps/web, with two rules relaxed to warnings for this app.
  *
- * This app spent its life in a repo that had no linter at all, so adopting the
- * shared config surfaced 24 pre-existing errors in one go. Failing the build on
- * them would mean rewriting a two-thousand-line client component as part of a
- * directory move, which is how a move turns into a rewrite and stops being
- * reviewable.
+ * This app spent its life in a repo with no linter, so adopting the shared
+ * config surfaced a batch of reports at once. They were triaged rather than
+ * bulk-suppressed:
  *
- * So they are warnings here rather than off: they stay visible on every lint
- * run and can be paid down deliberately. Two of them are worth real attention
- * rather than a mechanical fix, since they may be genuine bugs:
- * `react-hooks/set-state-in-effect` fires in four places, and
- * `react-hooks/exhaustive-deps` flags a useEffect missing three dependencies.
+ *  - `react-hooks/set-state-in-effect` — every hit here is an intentional,
+ *    correct pattern the rule is conservative about: SSR-safe randomness
+ *    (`embed-week-client`), localStorage hydration on mount (`theme`, the
+ *    weekly-target effect), a `storage`-event subscription, and derived-state
+ *    resets keyed on a changed value. None is a cascading-render bug. A warning
+ *    keeps them visible without forcing risky rewrites of a working
+ *    two-thousand-line component.
+ *  - `@typescript-eslint/no-explicit-any` — the remaining `any`s are dynamic
+ *    JSON-RPC params and JSON payloads where a precise type buys little.
  *
- * New code should not add to this list. When the count reaches zero, delete
- * this block and inherit apps/web's config unchanged.
+ * The genuinely wrong things this surfaced were fixed rather than downgraded:
+ * a misplaced exhaustive-deps directive and the pre-existing title-block
+ * effect. New code should not add to the two relaxed rules.
  */
-const inheritedDebt = {
+const relaxed = {
   files: ["app/**/*.{ts,tsx}"],
   rules: {
     "@typescript-eslint/no-explicit-any": "warn",
     "react-hooks/set-state-in-effect": "warn",
-  },
-};
-
-/** Plain Node scripts, run directly by the Railway preDeployCommand. */
-const nodeScripts = {
-  files: ["scripts/**/*.{js,mjs}"],
-  rules: {
-    // CommonJS is correct here: migrate.js is executed by `node` outside the
-    // bundle, not compiled as part of the app.
-    "@typescript-eslint/no-require-imports": "off",
+    // Bindings deliberately prefixed with `_` are intentional throwaways
+    // (destructured-but-unused, caught-but-unused); do not flag them.
+    "@typescript-eslint/no-unused-vars": [
+      "warn",
+      { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
+    ],
   },
 };
 
@@ -42,8 +41,7 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
-  inheritedDebt,
-  nodeScripts,
+  relaxed,
 ]);
 
 export default eslintConfig;

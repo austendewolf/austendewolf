@@ -26,6 +26,30 @@ const nextConfig: NextConfig = {
       fallback: [],
     };
   },
+  async headers() {
+    // A deliberately conservative set: transport and sniffing protections plus
+    // clickjacking defence. No restrictive Content-Security-Policy default,
+    // because the theme bootstrap runs as an inline script and a strict CSP
+    // would need nonces threaded through it — worth doing later, not worth
+    // silently breaking the site now.
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains; preload",
+          },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          // Nothing here is meant to be framed; the MCP endpoint and the site
+          // are both first-party only.
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

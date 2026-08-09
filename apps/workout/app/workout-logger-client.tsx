@@ -185,7 +185,6 @@ export default function WorkoutLoggerClient({
   // so refresh / homescreen-icon reopen lands on what the user was
   // looking at. The URL is the source of truth; localStorage is the
   // fallback when no params are present.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (dateParam || viewParam) return;
@@ -203,6 +202,11 @@ export default function WorkoutLoggerClient({
       params.set("date", d);
       router.replace(`/?${params.toString()}`);
     } catch {}
+    // Runs once on mount: it restores the last view/date only when the URL
+    // carries none, so re-running on param changes would fight the navigation
+    // it just performed. The referenced values are read for their initial
+    // state deliberately.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Granularity swap keeps the anchor date the same; the view interprets it.
