@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { desc, eq, inArray } from "drizzle-orm";
+import { workouts } from "@awd/db";
 import { authorizeMcp } from "@/lib/mcp-auth";
-import { getSql } from "@/lib/db";
+import { getDb } from "@/lib/db";
 import { workoutId, parseWorkoutId } from "@/app/week-schedule";
 import { loadProgram, loadSchedule } from "@/lib/program";
 
@@ -130,10 +132,13 @@ async function handleToolCall(name: string, args: any) {
     const id = typeof args?.id === "string" ? args.id : "";
     if (!id) throw new Error("id required");
     const parsed = parseWorkoutId(id);
-    const sql = getSql();
-    const rows = await sql<{ data: unknown; updated_at: Date }[]>`
-      SELECT data, updated_at FROM workouts WHERE id = ${id} LIMIT 1
-    `;
+    // Aliased to updated_at, not updatedAt: these rows are serialised straight
+    // into the tool's JSON, so the column names are a wire format.
+    const rows = await getDb()
+      .select({ data: workouts.data, updated_at: workouts.updatedAt })
+      .from(workouts)
+      .where(eq(workouts.id, id))
+      .limit(1);
     const program = await loadProgram();
     const template = parsed ? program.find((d) => d.id === parsed.dayId) : null;
     const payload = {
@@ -156,11 +161,11 @@ async function handleToolCall(name: string, args: any) {
     const week = schedule.find((w) => w.startDate === startDate);
     if (!week) throw new Error(`No scheduled week starting ${startDate}`);
     const program = await loadProgram();
-    const sql = getSql();
     const ids = week.days.map((d) => workoutId(d.date, d.dayId));
-    const rows = await sql<{ id: string; data: unknown; updated_at: Date }[]>`
-      SELECT id, data, updated_at FROM workouts WHERE id = ANY(${ids})
-    `;
+    const rows = await getDb()
+      .select({ id: workouts.id, data: workouts.data, updated_at: workouts.updatedAt })
+      .from(workouts)
+      .where(inArray(workouts.id, ids));
     const byId = new Map(rows.map((r) => [r.id, r] as const));
     const days = week.days.map((d) => {
       const id = workoutId(d.date, d.dayId);
@@ -206,10 +211,10 @@ async function handleToolCall(name: string, args: any) {
   }
 
   if (name === "get_all_workouts") {
-    const sql = getSql();
-    const rows = await sql<{ id: string; data: unknown; updated_at: Date }[]>`
-      SELECT id, data, updated_at FROM workouts ORDER BY updated_at DESC
-    `;
+    const rows = await getDb()
+      .select({ id: workouts.id, data: workouts.data, updated_at: workouts.updatedAt })
+      .from(workouts)
+      .orderBy(desc(workouts.updatedAt));
     return { content: [{ type: "text", text: JSON.stringify({ workouts: rows }, null, 2) }] };
   }
 

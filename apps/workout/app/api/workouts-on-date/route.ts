@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getSql } from "@/lib/db";
+import { asc, like } from "drizzle-orm";
+import { workouts } from "@awd/db";
+import { getDb } from "@/lib/db";
 import { requireUser } from "@/lib/auth-server";
 
 export const runtime = "nodejs";
@@ -24,12 +26,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "invalid_date" }, { status: 400 });
   }
   try {
-    const sql = getSql();
-    const rows = await sql<{ id: string; data: unknown }[]>`
-      SELECT id, data FROM workouts
-      WHERE id LIKE ${`${date}-%`}
-      ORDER BY id
-    `;
+    const rows = await getDb()
+      .select({ id: workouts.id, data: workouts.data })
+      .from(workouts)
+      .where(like(workouts.id, `${date}-%`))
+      .orderBy(asc(workouts.id));
     return NextResponse.json({ workouts: rows });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "db_error";

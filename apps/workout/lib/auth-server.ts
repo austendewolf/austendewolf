@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient, type User } from "@supabase/supabase-js";
-import { isAllowed } from "@/lib/allowlist";
+import { isAllowed } from "@awd/auth";
 
 /**
  * Server-side Supabase client used only for validating bearer tokens

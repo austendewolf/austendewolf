@@ -1,0 +1,17 @@
+**/node_modules
+**/.next
+**/out
+.git
+.gitignore
+**/.env*
+!.env.example
+**/Dockerfile*
+**/.dockerignore
+README.md
+.vscode
+.idea
+*.md
+
+# Note: unlike apps/web, `scripts` and `migrations` are NOT ignored here.
+# Railway runs `scripts/migrate.js` as the preDeployCommand and it reads the
+# .sql files at deploy time, so both have to reach the runner image.

@@ -1,25 +1,31 @@
 {
-  "name": "workout-logger",
+  "name": "workout",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "node server.js",
-    "migrate": "node scripts/migrate.js"
+    "start": "next start",
+    "lint": "eslint",
+    "seed": "node --experimental-strip-types -e \"import('./app/program.ts').then(m=>require('node:fs').writeFileSync('scripts/seed.program.json', JSON.stringify(m.PROGRAM)))\" && node --experimental-strip-types -e \"import('./app/week-schedule.ts').then(m=>require('node:fs').writeFileSync('scripts/seed.schedule.json', JSON.stringify(m.SCHEDULE)))\" && node scripts/seed-catalog.mjs"
   },
   "dependencies": {
+    "@awd/auth": "workspace:*",
+    "@awd/db": "workspace:*",
     "@supabase/supabase-js": "^2.107.0",
+    "drizzle-orm": "^0.45.2",
     "next": "16.2.4",
-    "postgres": "^3.4.5",
+    "postgres": "^3.4.9",
     "praetom": "^0.3.4-rc.24",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
   "devDependencies": {
     "@types/node": "^20",
-    "@types/react": "19.2.4",
-    "@types/react-dom": "19.2.4",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.4",
     "typescript": "^5"
   }
 }

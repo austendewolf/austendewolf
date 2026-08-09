@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getSql } from "@/lib/db";
+import { eq } from "drizzle-orm";
+import { workouts } from "@awd/db";
+import { getDb } from "@/lib/db";
 import { requireUser } from "@/lib/auth-server";
 
 export const runtime = "nodejs";
@@ -29,10 +31,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const sql = getSql();
-    const rows = await sql<{ data: unknown }[]>`
-      SELECT data FROM workouts WHERE id = ${id} LIMIT 1
-    `;
+    const rows = await getDb()
+      .select({ data: workouts.data })
+      .from(workouts)
+      .where(eq(workouts.id, id))
+      .limit(1);
     if (rows.length === 0) {
       return NextResponse.json({});
     }
@@ -63,13 +66,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const sql = getSql();
-    await sql`
-      INSERT INTO workouts (id, data, updated_at)
-      VALUES (${id}, ${sql.json(body as any)}, NOW())
-      ON CONFLICT (id) DO UPDATE
-      SET data = EXCLUDED.data, updated_at = NOW()
-    `;
+    await getDb()
+      .insert(workouts)
+      .values({ id, data: body, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: workouts.id,
+        set: { data: body, updatedAt: new Date() },
+      });
     return NextResponse.json({ ok: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "db_error";

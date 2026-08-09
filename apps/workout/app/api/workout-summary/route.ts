@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getSql } from "@/lib/db";
+import { and, gte, lte } from "drizzle-orm";
+import { workouts } from "@awd/db";
+import { getDb } from "@/lib/db";
 import { requireUser } from "@/lib/auth-server";
 
 export const runtime = "nodejs";
@@ -57,19 +59,20 @@ export async function GET(req: NextRequest) {
   const upper = `${to}-￿`;
 
   try {
-    const sql = getSql();
-    const rows = await sql<{ id: string; data: unknown }[]>`
-      SELECT id, data FROM workouts
-      WHERE id >= ${lower} AND id <= ${upper}
-    `;
-    const workouts = rows.map((row) => {
+    const rows = await getDb()
+      .select({ id: workouts.id, data: workouts.data })
+      .from(workouts)
+      .where(and(gte(workouts.id, lower), lte(workouts.id, upper)));
+    // Named `summaries` rather than `workouts`: that identifier is now the
+    // table itself, imported above and used by the query two lines up.
+    const summaries = rows.map((row) => {
       const m = row.id.match(/^(\d{4}-\d{2}-\d{2})-(.+)$/);
       const date = m?.[1] ?? "";
       const dayId = m?.[2] ?? "";
       const { volume, setsDone, setsTotal } = summarize(row.data);
       return { id: row.id, date, dayId, volume, setsDone, setsTotal };
     });
-    return NextResponse.json({ workouts });
+    return NextResponse.json({ workouts: summaries });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "db_error";
     return NextResponse.json({ error: msg }, { status: 500 });

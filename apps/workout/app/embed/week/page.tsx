@@ -1,5 +1,6 @@
+import { workouts } from "@awd/db";
 import { loadProgram, loadSchedule } from "@/lib/program";
-import { getSql } from "@/lib/db";
+import { getDb } from "@/lib/db";
 import type { Day } from "@/app/program";
 import type { Week } from "@/app/week-schedule";
 import EmbedWeekClient from "./embed-week-client";
@@ -34,8 +35,7 @@ export default async function EmbedWeekPage() {
 
 async function loadLoggedIds(): Promise<Set<string>> {
   try {
-    const sql = getSql();
-    const rows = await sql<{ id: string }[]>`SELECT id FROM workouts`;
+    const rows = await getDb().select({ id: workouts.id }).from(workouts);
     return new Set(rows.map((r) => r.id));
   } catch {
     return new Set();
