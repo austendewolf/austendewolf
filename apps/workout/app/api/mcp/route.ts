@@ -77,14 +77,23 @@ const TOOLS = [
   },
 ];
 
-// Public base URL for the deployed app. RAILWAY_PUBLIC_DOMAIN is
-// injected by Railway; fall back to the custom domain in prod, and to
-// localhost for local dev.
+/**
+ * Public base URL for the deployed app, including the `/workout` base path.
+ *
+ * This is handed to an MCP client to render in an iframe, so it has to be the
+ * address a browser can actually reach. WORKOUT_PUBLIC_ORIGIN is the canonical
+ * answer in production (austendewolf.com, which proxies this app under the
+ * prefix). RAILWAY_PUBLIC_DOMAIN is the per-service fallback so a preview
+ * deployment still renders something valid.
+ */
+const BASE_PATH = "/workout";
+
 function publicBaseUrl(): string {
+  const configured = process.env.WORKOUT_PUBLIC_ORIGIN?.replace(/\/$/, "");
+  if (configured) return `${configured}${BASE_PATH}`;
   const domain = process.env.RAILWAY_PUBLIC_DOMAIN;
-  if (domain) return `https://${domain}`;
-  if (process.env.NODE_ENV === "production") return "https://workout.austendewolf.com";
-  return "http://localhost:3000";
+  if (domain) return `https://${domain}${BASE_PATH}`;
+  return `http://localhost:3000${BASE_PATH}`;
 }
 
 function jsonRpcResult(id: number | string | null, result: unknown) {
