@@ -9,7 +9,11 @@
     "start": "pnpm --filter web start",
     "lint": "pnpm --filter web lint",
     "migrate": "pnpm --filter web migrate",
-    "db:generate": "pnpm --filter @awd/db generate"
+    "db:generate": "pnpm --filter @awd/db generate",
+    "workout:dev": "pnpm --filter workout dev",
+    "workout:build": "pnpm --filter workout build",
+    "workout:lint": "pnpm --filter workout lint",
+    "workout:seed": "pnpm --filter workout seed"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

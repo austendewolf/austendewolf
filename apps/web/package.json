@@ -10,6 +10,7 @@
     "migrate": "tsx scripts/migrate.ts"
   },
   "dependencies": {
+    "@awd/auth": "workspace:*",
     "@awd/db": "workspace:*",
     "@base-ui/react": "^1.4.1",
     "@supabase/ssr": "^0.10.2",

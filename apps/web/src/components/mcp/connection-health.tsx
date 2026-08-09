@@ -30,11 +30,19 @@ interface Snapshot {
   checkedAt: number | null;
   /** True once a poll has failed and none has ever succeeded. */
   unreachable: boolean;
-  /** Advances every second purely so "12s ago" counts up on its own. */
-  tick: number;
+  /**
+   * Wall clock, refreshed every second, purely so "12s ago" counts up.
+   *
+   * It lives in the store rather than being read during render because
+   * `Date.now()` is impure: called from render it makes the same state produce
+   * different output, which breaks the assumption React relies on to re-run a
+   * render safely. Sampling it in the interval and publishing it keeps render a
+   * function of the snapshot.
+   */
+  now: number;
 }
 
-let snapshot: Snapshot = { accounts: null, checkedAt: null, unreachable: false, tick: 0 };
+let snapshot: Snapshot = { accounts: null, checkedAt: null, unreachable: false, now: 0 };
 const listeners = new Set<() => void>();
 let timers: ReturnType<typeof setInterval>[] = [];
 
@@ -43,7 +51,7 @@ const SERVER_SNAPSHOT: Snapshot = {
   accounts: null,
   checkedAt: null,
   unreachable: false,
-  tick: 0,
+  now: 0,
 };
 
 function publish(next: Partial<Snapshot>) {
@@ -65,7 +73,14 @@ async function poll(force = false) {
     const res = await fetch("/api/mcp/health", { cache: "no-store" });
     if (!res.ok) throw new Error(String(res.status));
     const data = (await res.json()) as { checkedAt: string; accounts: Health[] };
-    publish({ accounts: data.accounts, checkedAt: Date.parse(data.checkedAt), unreachable: false });
+    // `now` is sampled here as well as on the tick, so the label is correct the
+    // moment a poll lands rather than reading "checking…" until the next second.
+    publish({
+      accounts: data.accounts,
+      checkedAt: Date.parse(data.checkedAt),
+      unreachable: false,
+      now: Date.now(),
+    });
   } catch {
     // A failed poll is not a failed connection. Keep the last good answer
     // rather than flashing every account to broken because the wifi blipped.
@@ -81,7 +96,7 @@ function subscribe(listener: () => void): () => void {
     void poll(true);
     timers = [
       setInterval(poll, POLL_MS),
-      setInterval(() => publish({ tick: snapshot.tick + 1 }), TICK_MS),
+      setInterval(() => publish({ now: Date.now() }), TICK_MS),
     ];
     document.addEventListener("visibilitychange", onVisible);
   }
@@ -119,12 +134,11 @@ export function ConnectionHealth({
   const live = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const found = live.accounts?.find((a) => a.name === name);
   const healthy = found?.healthy ?? initial.healthy;
-  const error = found?.error ?? initial.error;
 
-  // The label re-reads Date.now() on every render, and the store's one-second
-  // tick is what causes that render. Before the first poll lands there is no
-  // timestamp to count from, so it says so instead of guessing.
-  const checked = live.checkedAt ? ago(live.checkedAt, Date.now()) : null;
+  // Both halves come from the store, so this stays a pure function of the
+  // snapshot. Before the first poll lands there is no timestamp to count from,
+  // and before the first tick no clock, so it says so rather than guessing.
+  const checked = live.checkedAt && live.now ? ago(live.checkedAt, live.now) : null;
 
   return (
     <div className="text-right">

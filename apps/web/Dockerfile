@@ -5,9 +5,14 @@ FROM node:22-alpine AS deps
 WORKDIR /app
 RUN corepack enable
 
-# Workspace manifests (resolve graph without copying source)
+# Workspace manifests (resolve graph without copying source).
+# Every workspace project's manifest has to be here, including ones this image
+# does not build: --frozen-lockfile compares the lockfile against the whole
+# workspace, and a missing importer makes it refuse to install.
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/web/package.json ./apps/web/
+COPY apps/workout/package.json ./apps/workout/
+COPY packages/auth/package.json ./packages/auth/
 COPY packages/db/package.json ./packages/db/
 
 RUN pnpm install --frozen-lockfile
@@ -19,10 +24,14 @@ RUN corepack enable
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
+COPY --from=deps /app/packages/auth/node_modules ./packages/auth/node_modules
 COPY --from=deps /app/packages/db/node_modules ./packages/db/node_modules
 
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json ./
 COPY apps/web ./apps/web
+# Workspace dependencies: node_modules carries only symlinks into these, so the
+# sources have to be present or the imports dangle at build time.
+COPY packages/auth ./packages/auth
 COPY packages/db ./packages/db
 
 ENV NEXT_TELEMETRY_DISABLED=1
