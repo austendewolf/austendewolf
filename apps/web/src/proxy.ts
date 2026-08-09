@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { isAllowed } from "@/lib/auth/allowlist";
+import { isAllowed } from "@awd/auth";
 
 /**
  * Keeps the Supabase session fresh, and enforces that only the site owner may

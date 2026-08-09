@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { isAllowed } from "@/lib/auth/allowlist";
+import { isAllowed } from "@awd/auth";
 import { emailRedirectTo } from "@/lib/auth/brand";
 import { originFrom } from "@/lib/origin";
 import { createClient } from "@/lib/supabase/server";

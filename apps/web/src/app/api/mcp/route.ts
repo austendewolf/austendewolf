@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { bearerMatches, mcpTokens } from "@awd/auth";
 
 import { listAccounts } from "@/lib/mcp/accounts";
 import { ADMIN_TOOLS } from "@/lib/mcp/admin";
@@ -11,44 +11,21 @@ const ALL_TOOLS = [...TOOLS, ...ADMIN_TOOLS];
 
 // Route handlers are uncached by default in this version, and only GET can opt
 // in, so POST needs no cache configuration. `runtime` is still a valid segment
-// config and node is required for the crypto import.
+// config and node is required for the crypto the token compare uses.
 export const runtime = "nodejs";
 
 /**
  * The MCP endpoint.
  *
  * A remote MCP server with auth in front of it: JSON-RPC over POST, guarded by
- * a bearer token. Tokens are configured as MCP_TOKENS, a comma-separated list
- * so one can be rotated in before the old one is retired.
+ * a bearer token. The token check lives in `@awd/auth` so this server and the
+ * workout one cannot disagree about what a valid credential is.
  */
 
 const PROTOCOL = "2025-06-18";
 const MAX_BODY = 1_048_576;
 
-function tokens(): string[] {
-  return (process.env.MCP_TOKENS ?? "")
-    .split(",")
-    .map((t) => t.trim())
-    .filter(Boolean);
-}
-
-/** Constant-time compare that tolerates a length mismatch. */
-function secretEquals(a: string, b: string): boolean {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  if (left.length !== right.length) {
-    timingSafeEqual(left, left);
-    return false;
-  }
-  return timingSafeEqual(left, right);
-}
-
-function authorized(request: Request): boolean {
-  const header = request.headers.get("authorization") ?? "";
-  if (!header.startsWith("Bearer ")) return false;
-  const presented = header.slice(7);
-  return tokens().some((t) => secretEquals(presented, t));
-}
+const authorized = (request: Request) => bearerMatches(request);
 
 const toolResult = (payload: unknown, isError = false) => ({
   content: [{ type: "text", text: typeof payload === "string" ? payload : JSON.stringify(payload, null, 1) }],
@@ -130,7 +107,7 @@ function withAccountEnum(schema: Record<string, unknown>, accounts: string[]) {
 }
 
 export async function POST(request: Request) {
-  if (!tokens().length) {
+  if (!mcpTokens().length) {
     return Response.json({ error: "server is not configured" }, { status: 503 });
   }
   if (!authorized(request)) {

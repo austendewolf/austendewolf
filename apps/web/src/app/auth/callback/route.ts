@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 
-import { isAllowed } from "@/lib/auth/allowlist";
+import { isAllowed } from "@awd/auth";
 import { originFrom } from "@/lib/origin";
 import { createClient } from "@/lib/supabase/server";
 

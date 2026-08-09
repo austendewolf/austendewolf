@@ -1,4 +1,4 @@
-import { isAllowed } from "@/lib/auth/allowlist";
+import { isAllowed } from "@awd/auth";
 import { createClient } from "@/lib/supabase/server";
 
 /**
