@@ -32,13 +32,39 @@ const statements = sql
   .map((s) => s.trim())
   .filter(Boolean);
 
+/**
+ * drizzle-kit emits plain CREATE/ALTER, which fails the second time and fails
+ * immediately against a schema that already exists. Rewriting here rather than
+ * hand-editing the generated file keeps `drizzle-kit generate` free to
+ * regenerate it, and means a baseline migration (one describing tables already
+ * present, as 0002 does for the workout schema) is a no-op rather than a wall.
+ */
+function idempotent(statement) {
+  const s = statement
+    .replace(/^CREATE TABLE "/i, 'CREATE TABLE IF NOT EXISTS "')
+    .replace(/^CREATE SCHEMA "/i, 'CREATE SCHEMA IF NOT EXISTS "')
+    .replace(/^CREATE INDEX "/i, 'CREATE INDEX IF NOT EXISTS "')
+    .replace(/^CREATE UNIQUE INDEX "/i, 'CREATE UNIQUE INDEX IF NOT EXISTS "');
+
+  // ADD CONSTRAINT has no IF NOT EXISTS, so swallow the duplicate-object error.
+  if (/^ALTER TABLE .* ADD CONSTRAINT /i.test(s)) {
+    const body = s.replace(/;\s*$/, "").replace(/'/g, "''");
+    return `DO $$ BEGIN
+  EXECUTE '${body}';
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+  WHEN duplicate_table THEN NULL;
+END $$;`;
+  }
+  return s;
+}
+
 const client = postgres(url, { prepare: false, max: 1 });
 try {
   for (const statement of statements) {
-    // CREATE TABLE without IF NOT EXISTS would fail a second run; make it safe.
-    const safe = statement.replace(/^CREATE TABLE "/i, 'CREATE TABLE IF NOT EXISTS "');
+    const safe = idempotent(statement);
     await client.unsafe(safe);
-    console.log("applied:", safe.split("\n")[0].slice(0, 70));
+    console.log("applied:", statement.split("\n")[0].slice(0, 70));
   }
   const [{ count }] = await client`
     SELECT count(*)::int AS count FROM information_schema.tables
