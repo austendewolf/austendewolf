@@ -78,22 +78,20 @@ const TOOLS = [
 ];
 
 /**
- * Public base URL for the deployed app, including the `/workout` base path.
+ * Public base URL for the deployed app.
  *
- * This is handed to an MCP client to render in an iframe, so it has to be the
- * address a browser can actually reach. WORKOUT_PUBLIC_ORIGIN is the canonical
- * answer in production (austendewolf.com, which proxies this app under the
- * prefix). RAILWAY_PUBLIC_DOMAIN is the per-service fallback so a preview
- * deployment still renders something valid.
+ * This is handed to an MCP client to render in an iframe, so it has to be an
+ * address a browser can actually reach. WORKOUT_PUBLIC_ORIGIN wins when set,
+ * which is how the canonical hostname is pinned once its certificate exists;
+ * RAILWAY_PUBLIC_DOMAIN is the per-service fallback, so the embed keeps working
+ * on the service's own domain in the meantime.
  */
-const BASE_PATH = "/workout";
-
 function publicBaseUrl(): string {
   const configured = process.env.WORKOUT_PUBLIC_ORIGIN?.replace(/\/$/, "");
-  if (configured) return `${configured}${BASE_PATH}`;
+  if (configured) return configured;
   const domain = process.env.RAILWAY_PUBLIC_DOMAIN;
-  if (domain) return `https://${domain}${BASE_PATH}`;
-  return `http://localhost:3000${BASE_PATH}`;
+  if (domain) return `https://${domain}`;
+  return "http://localhost:3000";
 }
 
 function jsonRpcResult(id: number | string | null, result: unknown) {

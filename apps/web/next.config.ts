@@ -1,13 +1,6 @@
 import type { NextConfig } from "next";
 import path from "node:path";
 
-// Where the workout app actually runs. It is a separate service (its own Next
-// build, its own database role), reached over its Railway domain and surfaced
-// under /workout here. Overridable so a preview environment can point at its
-// own instance rather than production's.
-const WORKOUT_ORIGIN =
-  process.env.WORKOUT_ORIGIN ?? "https://workout-production-0654.up.railway.app";
-
 const nextConfig: NextConfig = {
   output: "standalone",
   // Stamped once, when the build runs. The footer prints this as the revision
@@ -28,19 +21,6 @@ const nextConfig: NextConfig = {
           has: [{ type: "host", value: "mcp.austendewolf.com" }],
           destination: "/api/mcp",
         },
-        // The workout app runs as its own service and its own Next build, so it
-        // cannot simply be a route here. It is proxied under this prefix rather
-        // than given a subdomain: a new subdomain needs a new certificate, and
-        // that is precisely what Railway could not issue. The apex certificate
-        // already exists, so this path costs nothing.
-        //
-        // apps/workout sets `basePath: "/workout"`, so the prefix is preserved
-        // end to end and its asset URLs resolve without rewriting.
-        {
-          source: "/workout/:path*",
-          destination: `${WORKOUT_ORIGIN}/workout/:path*`,
-        },
-        { source: "/workout", destination: `${WORKOUT_ORIGIN}/workout` },
       ],
       afterFiles: [],
       fallback: [],

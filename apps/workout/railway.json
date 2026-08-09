@@ -6,8 +6,7 @@
   },
   "deploy": {
     "startCommand": "node apps/workout/server.js",
-    "_comment": "healthcheckPath carries the basePath from next.config.ts: with basePath '/workout' the route is served at /workout/api/health, and probing /api/health returns 404 so the deploy never goes healthy.",
-    "healthcheckPath": "/workout/api/health",
+    "healthcheckPath": "/api/health",
     "healthcheckTimeout": 30,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 5

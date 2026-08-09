@@ -4,21 +4,6 @@ import path from "node:path";
 const nextConfig: NextConfig = {
   output: "standalone",
   reactStrictMode: true,
-  /*
-   * Served under austendewolf.com/workout rather than its own subdomain.
-   *
-   * workout.austendewolf.com needed a certificate Railway could not issue: the
-   * hostname was registered and deleted several times during the service move,
-   * which trips Let's Encrypt's duplicate-certificate rate limit, and every
-   * retry then sits in VALIDATING_OWNERSHIP regardless of which service holds
-   * it or how clean the DNS is. The apex already has a valid certificate, so
-   * serving from a path there needs no new one at all. The subdomain redirects
-   * at the Cloudflare edge, which terminates TLS itself and never asks Railway.
-   *
-   * basePath makes the app own the prefix, so its own asset and route URLs are
-   * already correct and apps/web can proxy the prefix straight through.
-   */
-  basePath: "/workout",
   // The standalone bundle keeps the workspace layout, so tracing has to start
   // at the repo root rather than at this app.
   outputFileTracingRoot: path.join(__dirname, "../../"),
