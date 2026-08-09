@@ -2,9 +2,16 @@
 /**
  * Minimal migration runner. Reads .sql files from ./migrations in order
  * and applies any that haven't already been recorded in the
- * public._workout_migrations tracker table. Idempotent + safe to re-run.
+ * _workout_migrations tracker table. Idempotent + safe to re-run.
  *
  * Invoked as the Railway preDeployCommand so every deploy migrates first.
+ *
+ * Every table name here is deliberately unqualified. The database role this
+ * connects as carries `search_path = workout`, so unqualified names resolve
+ * into the app's own schema and nothing else. Hard-coding `public.` would
+ * write the tracker into a schema this role has no business touching, and
+ * would silently disagree with the migrations themselves, which have always
+ * been unqualified.
  */
 const fs = require("node:fs");
 const path = require("node:path");
@@ -17,7 +24,7 @@ async function main() {
 
   try {
     await sql`
-      CREATE TABLE IF NOT EXISTS public._workout_migrations (
+      CREATE TABLE IF NOT EXISTS _workout_migrations (
         name TEXT PRIMARY KEY,
         applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
@@ -31,7 +38,7 @@ async function main() {
 
     for (const file of files) {
       const applied = await sql`
-        SELECT 1 FROM public._workout_migrations WHERE name = ${file}
+        SELECT 1 FROM _workout_migrations WHERE name = ${file}
       `;
       if (applied.length > 0) {
         console.log(`skip ${file}`);
@@ -41,7 +48,7 @@ async function main() {
       const text = fs.readFileSync(path.join(dir, file), "utf8");
       await sql.unsafe(text);
       await sql`
-        INSERT INTO public._workout_migrations (name) VALUES (${file})
+        INSERT INTO _workout_migrations (name) VALUES (${file})
       `;
     }
     console.log("migrations done");

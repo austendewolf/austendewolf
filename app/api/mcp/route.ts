@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { authorizeMcp } from "@/lib/mcp-auth";
 import { getSql } from "@/lib/db";
 import { workoutId, parseWorkoutId } from "@/app/week-schedule";
 import { loadProgram, loadSchedule } from "@/lib/program";
@@ -241,6 +242,12 @@ async function handleToolCall(name: string, args: any) {
 }
 
 export async function POST(req: NextRequest) {
+  // Checked before the body is read, so an unauthenticated caller never gets
+  // as far as making this process parse input it supplied.
+  if (!(await authorizeMcp(req))) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   let body: any;
   try {
     body = await req.json();
@@ -276,7 +283,16 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function GET() {
+/**
+ * Discovery, behind the same gate as everything else.
+ *
+ * The tool names alone describe what this server holds and how to ask for it,
+ * so there is no version of this worth serving to an anonymous caller.
+ */
+export async function GET(req: NextRequest) {
+  if (!(await authorizeMcp(req))) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
   return NextResponse.json({
     server: SERVER_INFO,
     protocolVersion: PROTOCOL_VERSION,

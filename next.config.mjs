@@ -2,14 +2,15 @@
 const config = {
   output: "standalone",
   reactStrictMode: true,
-  experimental: {
-    // instrumentation.ts at the repo root is auto-loaded when this is on;
-    // praetom's runtime register() runs from there on every cold start.
-    instrumentationHook: true,
-    // Keep praetom's CommonJS-built runtime out of Next's webpack bundle;
-    // it's loaded directly by the Node runtime instead.
-    serverComponentsExternalPackages: ["praetom"],
-  },
+  // instrumentation.ts at the repo root is auto-loaded now; the
+  // `experimental.instrumentationHook` flag that used to enable it graduated
+  // and was removed, so setting it is an error rather than a no-op. praetom's
+  // register() still runs from there on every cold start.
+  //
+  // Keep praetom's CommonJS-built runtime out of the bundle; it is loaded
+  // directly by the Node runtime instead. This moved out of `experimental`
+  // and was renamed from `serverComponentsExternalPackages`.
+  serverExternalPackages: ["praetom"],
   // (Removed PraetomPlugin webpack hook — the build-time export-wrap was
   // emitting undefined for some client component shapes, which crashed
   // the prod server with React's "Element type is invalid ... got
