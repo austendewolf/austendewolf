@@ -18,8 +18,12 @@ import { useDismissable } from "@/components/use-dismissable";
  * of the drawing.
  *
  * Signed out there is nothing to expand: one row, one way in.
+ *
+ * The signed-in address is deliberately not shown. There is one account, so
+ * naming it says nothing the reader does not know, and it was the thing that
+ * made this read as a panel rather than as rows of the key.
  */
-export function AccountRow({ signedIn, email }: { signedIn: boolean; email: string | null }) {
+export function AccountRow({ signedIn }: { signedIn: boolean }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
@@ -55,30 +59,24 @@ export function AccountRow({ signedIn, email }: { signedIn: boolean; email: stri
         <span className="title-block-value">{open ? "Close" : "Menu"}</span>
       </button>
 
+      {/*
+        Plain rows of the key, styled exactly like the sheet index above them.
+        No indent and no sub-treatment: expanding this should make the key
+        longer, not open a second panel inside it.
+      */}
       <div className="title-block-account-menu">
-        {/* The address is a label here, not a control: it answers "as whom"
-            without pretending to be a destination. */}
-        {email && (
-          <p className="title-block-row title-block-sub title-block-identity" title={email}>
-            <span className="title-block-label">{email}</span>
-          </p>
-        )}
-        <Link href="/account" className="title-block-row title-block-sub title-block-link">
+        <Link href="/account" className="title-block-row title-block-link">
           <span className="title-block-label">Connections</span>
+          <span className="title-block-value">A-04</span>
         </Link>
-        <Link
-          href="/account/password"
-          className="title-block-row title-block-sub title-block-link"
-        >
+        <Link href="/account/password" className="title-block-row title-block-link">
           <span className="title-block-label">Password</span>
+          <span className="title-block-value">A-05</span>
         </Link>
         {/* A form, not a link: a GET that destroys a session can be fired by a
             prefetch or a link scanner. */}
-        <form action={signOut}>
-          <button
-            type="submit"
-            className="title-block-row title-block-sub title-block-value-action w-full"
-          >
+        <form action={signOut} className="title-block-form">
+          <button type="submit" className="title-block-row title-block-account-action">
             <span className="title-block-label">Sign out</span>
           </button>
         </form>

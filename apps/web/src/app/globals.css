@@ -491,36 +491,19 @@
    * A child cell. Indented by its left rule rather than by padding alone, so
    * the nesting is drawn instead of implied.
    */
-  .paper .title-block-sub {
+  /* The form is a wrapper, not a row: it should not sit between the key and its
+     own cell, or the button stops being a sibling of the rows above it. */
+  .paper .title-block-form {
+    display: contents;
+  }
+
+  /* Sign out is a form button, so it needs the row geometry a link gets free. */
+  .paper .title-block-account-action {
     width: 100%;
-    padding-left: 1.1rem;
     text-align: left;
     cursor: pointer;
   }
-
-  /*
-   * The signed-in address: a caption, not a control. Left in its own case —
-   * every other row in the key is set uppercase, but an email address is a
-   * literal string and shouting it would misrepresent it.
-   */
-  .paper .title-block-identity {
-    cursor: default;
-    text-transform: none;
-  }
-  .paper .title-block-identity .title-block-label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 0.56rem;
-    color: var(--line-soft);
-    opacity: 0.75;
-  }
-
-  .paper .title-block-value-action {
-    cursor: pointer;
-  }
-  .paper .title-block-value-action:hover .title-block-label,
-  .paper .title-block-value-action:hover {
+  .paper .title-block-account-action:hover .title-block-label {
     color: var(--line-bright);
   }
 

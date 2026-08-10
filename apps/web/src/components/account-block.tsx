@@ -14,5 +14,5 @@ import { getViewer } from "@/lib/mcp/owner";
  */
 export async function AccountBlock() {
   const viewer = await getViewer();
-  return <AccountRow signedIn={viewer.signedIn} email={viewer.email} />;
+  return <AccountRow signedIn={viewer.signedIn} />;
 }
