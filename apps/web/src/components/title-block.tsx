@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 
 import { NAV_ITEMS } from "@/lib/nav";
+import { useDismissable } from "@/components/use-dismissable";
 
 /**
  * The title block, top right, at every width.
@@ -29,7 +30,8 @@ import { NAV_ITEMS } from "@/lib/nav";
 export function TitleBlock({ account }: { account?: React.ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  const ref = useDismissable<HTMLElement>(open, close);
 
   // Opening a sheet should close the index behind it, or the menu stays open
   // across a navigation and covers the drawing it just opened. Done as a
@@ -41,30 +43,6 @@ export function TitleBlock({ account }: { account?: React.ReactNode }) {
     setLastPath(pathname);
     setOpen(false);
   }
-
-  /*
-   * An expanded index sits over the drawing, and on the resume it lands on the
-   * one control in that corner. That is fine for a menu and not fine for
-   * something you can only dismiss by finding the row that opened it — so
-   * anywhere else on the sheet, and Escape, both close it.
-   */
-  useEffect(() => {
-    if (!open) return;
-
-    const onPointerDown = (event: PointerEvent) => {
-      if (!ref.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
 
   return (
     <nav

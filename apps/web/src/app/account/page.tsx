@@ -161,21 +161,6 @@ export default async function ConnectionsPage({
         ))}
       </div>
 
-      {/*
-        The one account control that is not in the key, and deliberately so: the
-        key carries signing in and out, not a row per account page. This is the
-        account root, so it is where the rest of them live — kept to a quiet
-        footer rather than a header block, which is what made it read as clutter
-        beside an email and a second sign-out.
-      */}
-      <div className="mt-16 border-t pt-4">
-        <a
-          href="/account/password"
-          className="font-mono text-xs uppercase tracking-widest text-muted-foreground transition-colors hover:text-accent"
-        >
-          Change password
-        </a>
-      </div>
     </div>
   );
 }

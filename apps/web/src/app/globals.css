@@ -457,18 +457,69 @@
   }
 
   /*
-   * The account row carries two targets, which no other row does: the label
-   * opens the account, the value ends the session. So the row is a container
-   * and each half is its own control, rather than the whole row being one link.
+   * The account row folds, like the index does.
+   *
+   * Every account control lives here rather than being repeated as a header on
+   * the connections page. They are behind a fold because the key is a title
+   * block: its height is part of the drawing, and four permanent rows for
+   * something you touch rarely would push the frame down the sheet.
    */
-  .paper .title-block-form {
-    display: contents;
+  /*
+   * Deliberately not `.title-block-toggle`. That class is the narrow-sheet
+   * affordance for the index and is `display: none` until a media query turns
+   * it on — reusing it here made the account row vanish on a wide sheet, since
+   * the two rules have equal specificity and the index one is written later.
+   */
+  .paper .title-block-account-toggle {
+    display: flex;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
   }
-  .paper .title-block-label-link,
+  .paper .title-block-account-toggle:hover .title-block-label,
+  .paper .title-block-account-toggle:hover .title-block-value {
+    color: var(--line-bright);
+  }
+  .paper .title-block-account-menu {
+    display: none;
+  }
+  .paper .title-block-account[data-open] .title-block-account-menu {
+    display: block;
+  }
+
+  /*
+   * A child cell. Indented by its left rule rather than by padding alone, so
+   * the nesting is drawn instead of implied.
+   */
+  .paper .title-block-sub {
+    width: 100%;
+    padding-left: 1.1rem;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  /*
+   * The signed-in address: a caption, not a control. Left in its own case —
+   * every other row in the key is set uppercase, but an email address is a
+   * literal string and shouting it would misrepresent it.
+   */
+  .paper .title-block-identity {
+    cursor: default;
+    text-transform: none;
+  }
+  .paper .title-block-identity .title-block-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.56rem;
+    color: var(--line-soft);
+    opacity: 0.75;
+  }
+
   .paper .title-block-value-action {
     cursor: pointer;
   }
-  .paper .title-block-label-link:hover,
+  .paper .title-block-value-action:hover .title-block-label,
   .paper .title-block-value-action:hover {
     color: var(--line-bright);
   }
