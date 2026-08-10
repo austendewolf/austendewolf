@@ -1,5 +1,4 @@
 import { ConnectionCard, ScopePicker } from "@/components/mcp/connection-card";
-import { SignOutButton } from "@/components/sign-out-button";
 import { Button } from "@/components/ui/button";
 import { checkAccount, listAccounts } from "@/lib/mcp/accounts";
 import { oauthConfigured, redirectUri } from "@/lib/mcp/oauth";
@@ -33,6 +32,9 @@ export default async function ConnectionsPage({
             ? "You are signed in, but this page is limited to the site owner."
             : "This page is private."}
         </p>
+        {/* Signed in as the wrong account, the way out is to sign out — but the
+            key already offers exactly that on every page, so repeating it here
+            would be the same control twice. */}
         {!viewer.signedIn && (
           <a
             href="/login?next=%2Faccount"
@@ -41,9 +43,6 @@ export default async function ConnectionsPage({
             Sign in
           </a>
         )}
-        {/* Signed in as the wrong account: the way out is to sign out, not to
-            sign in again on top of a session that will keep being refused. */}
-        {viewer.signedIn && !viewer.isOwner && <SignOutButton className="mt-8" />}
       </div>
     );
   }
@@ -54,21 +53,12 @@ export default async function ConnectionsPage({
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-16">
-      <div className="flex items-start justify-between gap-6">
-        <h1 className="text-4xl font-bold tracking-tight">Connections</h1>
-        <div className="text-right">
-          <p className="text-xs text-muted-foreground">{viewer.email}</p>
-          <div className="mt-2 flex items-center justify-end gap-3">
-            <a
-              href="/account/password"
-              className="text-xs text-muted-foreground hover:text-accent transition-colors"
-            >
-              Password
-            </a>
-            <SignOutButton />
-          </div>
-        </div>
-      </div>
+      {/*
+        No account header here. Who you are signed in as, and the way out, live
+        in the key — which is drawn on every page — so repeating them at the top
+        of this one was the same two controls twice.
+      */}
+      <h1 className="text-4xl font-bold tracking-tight">Connections</h1>
       <p className="mt-3 text-muted-foreground leading-relaxed">
         Google accounts the MCP server at{" "}
         <code className="font-mono text-sm">mcp.austendewolf.com</code> can act as. Each one
@@ -169,6 +159,22 @@ export default async function ConnectionsPage({
             configured={configured}
           />
         ))}
+      </div>
+
+      {/*
+        The one account control that is not in the key, and deliberately so: the
+        key carries signing in and out, not a row per account page. This is the
+        account root, so it is where the rest of them live — kept to a quiet
+        footer rather than a header block, which is what made it read as clutter
+        beside an email and a second sign-out.
+      */}
+      <div className="mt-16 border-t pt-4">
+        <a
+          href="/account/password"
+          className="font-mono text-xs uppercase tracking-widest text-muted-foreground transition-colors hover:text-accent"
+        >
+          Change password
+        </a>
       </div>
     </div>
   );
