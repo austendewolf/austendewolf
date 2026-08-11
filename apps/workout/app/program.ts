@@ -363,27 +363,17 @@ export const PROGRAM: Day[] = [
     name: "Easy Run",
     subtitle: "ZONE 2 · CONVERSATIONAL",
     weekLabel: "6-Week Program · Week 1",
+    // One line, not three. A warmup and cooldown split the same run across
+    // three fields and made logging a run feel like bookkeeping; the minutes
+    // that used to sit in them were folded into this entry for past sessions
+    // too, so the totals still reflect time actually spent.
     exercises: [
-      {
-        id: "warmup_walk",
-        name: "Warmup Walk",
-        sets: 1, targetReps: 5, targetWeight: null,
-        note: "5 minutes brisk",
-        description: "Brisk walk for 5 minutes to raise heart rate and loosen up before running. Log reps as minutes.",
-      },
       {
         id: "easy_run",
         name: "Easy Run",
         sets: 1, targetReps: 30, targetWeight: null,
         note: "30 min @ Z2 — should be able to hold a conversation",
-        description: "Zone 2 effort — nose-breathing pace, no labored breathing. If you can't talk in full sentences, slow down. Log reps as total minutes of running; weight optional (use as miles).",
-      },
-      {
-        id: "cooldown_walk",
-        name: "Cooldown Walk",
-        sets: 1, targetReps: 5, targetWeight: null,
-        note: "5 minutes easy",
-        description: "Walk for 5 minutes to bring heart rate down. Log reps as minutes.",
+        description: "Zone 2 effort — nose-breathing pace, no labored breathing. If you can't talk in full sentences, slow down. Log reps as total minutes, warmup and cooldown included; weight optional (use as miles).",
       },
     ],
   },
