@@ -18,6 +18,22 @@ const SLIDES = "https://slides.googleapis.com/v1/presentations";
 
 const WRITES_ALLOWED = (process.env.MCP_ALLOW_WRITES ?? "1") !== "0";
 
+/**
+ * Shared-drive support for the Drive v3 API.
+ *
+ * A file that lives in a Shared Drive is invisible to a request that does not
+ * opt in: `files.get` returns 404 (not 403) and `files.list` silently omits it,
+ * which reads exactly like a permission problem even though the browser opens
+ * the file fine. Every file-scoped call carries {@link ALL_DRIVES}; `files.list`
+ * additionally needs the item flag and a corpus that spans both drives.
+ */
+const ALL_DRIVES = { supportsAllDrives: true } as const;
+const LIST_ALL_DRIVES = {
+  supportsAllDrives: true,
+  includeItemsFromAllDrives: true,
+  corpora: "allDrives",
+} as const;
+
 /** Escape a caller-supplied value going into a URL path. */
 const seg = (value: string) => encodeURIComponent(String(value));
 
@@ -519,6 +535,7 @@ export const TOOLS: ToolDefinition[] = [
           q: String(a.query),
           pageSize: Math.min(Number(a.max_results ?? 10), 50),
           fields: "files(id,name,mimeType,modifiedTime,owners(emailAddress),webViewLink)",
+          ...LIST_ALL_DRIVES,
         },
       });
       return { files: data.files ?? [] };
@@ -539,13 +556,13 @@ export const TOOLS: ToolDefinition[] = [
         acct,
         "GET",
         `${DRIVE}/files/${id}`,
-        { params: { fields: "id,name,mimeType,size" } },
+        { params: { fields: "id,name,mimeType,size", ...ALL_DRIVES } },
       );
       const mime = meta.mimeType ?? "";
       let content: string;
       if (mime.startsWith("application/vnd.google-apps")) {
         content = await api<string>(acct, "GET", `${DRIVE}/files/${id}/export`, {
-          params: { mimeType: mime.endsWith("spreadsheet") ? "text/csv" : "text/plain" },
+          params: { mimeType: mime.endsWith("spreadsheet") ? "text/csv" : "text/plain", ...ALL_DRIVES },
           raw: true,
         });
       } else {
@@ -553,7 +570,7 @@ export const TOOLS: ToolDefinition[] = [
           throw new Error(`file is too large to read inline: ${meta.size} bytes`);
         }
         content = await api<string>(acct, "GET", `${DRIVE}/files/${id}`, {
-          params: { alt: "media" },
+          params: { alt: "media", ...ALL_DRIVES },
           raw: true,
         });
       }
