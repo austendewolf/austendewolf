@@ -110,6 +110,54 @@ async function createWithContent<T>(
   return (await res.json()) as T;
 }
 
+/**
+ * Upload raw bytes to Drive, optionally converting them to a native Google type.
+ *
+ * The binary sibling of {@link createWithContent}. That helper concatenates the
+ * multipart envelope as a string, which silently corrupts anything that is not
+ * valid UTF-8 — a `.pptx` is a zip, so it has to be carried as bytes. The body
+ * is therefore assembled as a Buffer: text envelope, raw media, text closer.
+ *
+ * Conversion is Drive's own: the media part keeps the *source* content type
+ * while `metadata.mimeType` names the *destination*. Set the destination to a
+ * `application/vnd.google-apps.*` type and Drive imports rather than stores —
+ * which is exactly how a `.pptx` becomes an editable Slides deck, a `.docx` a
+ * Doc, a `.xlsx` a Sheet.
+ */
+async function uploadBytes<T>(
+  account: string,
+  metadata: Record<string, unknown>,
+  sourceMime: string,
+  bytes: Buffer,
+): Promise<T> {
+  const token = await accessToken(account);
+  const boundary = `gws${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+  const head = Buffer.from(
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
+      `${JSON.stringify(metadata)}\r\n` +
+      `--${boundary}\r\nContent-Type: ${sourceMime}\r\n\r\n`,
+  );
+  const tail = Buffer.from(`\r\n--${boundary}--`);
+  const body = Buffer.concat([head, bytes, tail]);
+  const res = await fetch(
+    `${DRIVE_UPLOAD}/files?uploadType=multipart&supportsAllDrives=true` +
+      `&fields=id,name,mimeType,webViewLink`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": `multipart/related; boundary=${boundary}`,
+      },
+      body,
+      signal: AbortSignal.timeout(120_000),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(`Google API error ${res.status}: ${(await res.text()).slice(0, 600)}`);
+  }
+  return (await res.json()) as T;
+}
+
 interface GmailPart {
   mimeType?: string;
   body?: { data?: string };
@@ -610,6 +658,53 @@ export const TOOLS: ToolDefinition[] = [
         "text/markdown",
         String(a.markdown),
       );
+    },
+  },
+  {
+    name: "drive_upload",
+    description:
+      "Upload a file to Drive from base64 bytes, optionally importing it as a native Google type. " +
+      "This is how a deck is created: build a .pptx and upload it with convert_to set to the Slides " +
+      "type, and Google imports it as an editable presentation — there is no Slides equivalent of " +
+      "drive_create_doc's Markdown path, so you author the file and let Drive convert. The same route " +
+      "turns a .docx into a Doc and a .xlsx into a Sheet. Omit convert_to to store the file unchanged.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        account,
+        name: { type: "string", description: "File name in Drive" },
+        content_base64: { type: "string", description: "The file's bytes, base64-encoded" },
+        mime_type: {
+          type: "string",
+          description:
+            "Source content type of the uploaded bytes, e.g. " +
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation for a .pptx",
+        },
+        convert_to: {
+          type: "string",
+          description:
+            "Google type to import as, e.g. application/vnd.google-apps.presentation for Slides, " +
+            "…document for Docs, …spreadsheet for Sheets. Omit to keep the file as-is.",
+        },
+        folder_id: { type: "string", description: "Drive folder id; omit for My Drive" },
+      },
+      required: ["account", "name", "content_base64", "mime_type"],
+    },
+    run: async (a) => {
+      requireWrites("drive_upload");
+      const bytes = Buffer.from(String(a.content_base64), "base64");
+      if (bytes.length === 0) throw new Error("content_base64 decoded to zero bytes");
+      if (bytes.length > 40_000_000) {
+        throw new Error(`file too large to upload inline: ${bytes.length} bytes`);
+      }
+      const metadata: Record<string, unknown> = {
+        name: String(a.name),
+        // Destination type: the Google type when converting, else the source
+        // type so the file stores unchanged.
+        mimeType: a.convert_to ? String(a.convert_to) : String(a.mime_type),
+      };
+      if (a.folder_id) metadata.parents = [String(a.folder_id)];
+      return await uploadBytes(String(a.account), metadata, String(a.mime_type), bytes);
     },
   },
   {
