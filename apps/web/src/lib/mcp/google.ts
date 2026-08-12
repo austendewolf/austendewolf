@@ -708,6 +708,36 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: "drive_copy",
+    description:
+      "Duplicate a Drive file, keeping everything about it. This is how a deck is cloned with its design " +
+      "intact: the copy is the same file — theme, master, layouts, fonts, colours, images, diagrams, " +
+      "speaker notes — so nothing has to be rebuilt. Edit the copy afterward with slides_replace_text or " +
+      "slides_batch_update. Works across shared drives.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        account,
+        file_id: { type: "string", description: "The file to duplicate" },
+        name: { type: "string", description: "Name for the copy; defaults to 'Copy of <original>'" },
+        folder_id: { type: "string", description: "Drive folder for the copy; omit for My Drive" },
+      },
+      required: ["account", "file_id"],
+    },
+    run: async (a) => {
+      requireWrites("drive_copy");
+      const body: Record<string, unknown> = {};
+      if (a.name !== undefined) body.name = String(a.name);
+      if (a.folder_id) body.parents = [String(a.folder_id)];
+      return await api<Record<string, unknown>>(
+        String(a.account),
+        "POST",
+        `${DRIVE}/files/${seg(String(a.file_id))}/copy`,
+        { params: { fields: "id,name,mimeType,webViewLink", ...ALL_DRIVES }, body },
+      );
+    },
+  },
+  {
     name: "drive_share_file",
     description:
       "Grant one person access to a Drive file. Sends no email unless notify is set.",
@@ -1351,6 +1381,104 @@ export const TOOLS: ToolDefinition[] = [
       const changed = data.replies?.[0]?.replaceAllText?.occurrencesChanged ?? 0;
       if (changed === 0) throw new Error(`no occurrences of ${JSON.stringify(String(a.find))} found`);
       return { occurrencesChanged: changed, scopedTo: ids.length ? ids : "all slides" };
+    },
+  },
+  {
+    name: "slides_create",
+    description:
+      "Create a new, empty Google Slides deck natively and return its id and link. Build it up with " +
+      "slides_batch_update. To instead create a deck from a file you have already authored, use " +
+      "drive_upload with convert_to set to the Slides type.",
+    inputSchema: {
+      type: "object",
+      properties: { account, title: { type: "string" } },
+      required: ["account", "title"],
+    },
+    run: async (a) => {
+      requireWrites("slides_create");
+      const deck = await api<{ presentationId?: string; title?: string }>(
+        String(a.account),
+        "POST",
+        SLIDES,
+        { body: { title: String(a.title) } },
+      );
+      return {
+        presentationId: deck.presentationId,
+        title: deck.title,
+        webViewLink: deck.presentationId
+          ? `https://docs.google.com/presentation/d/${deck.presentationId}/edit`
+          : undefined,
+      };
+    },
+  },
+  {
+    name: "slides_batch_update",
+    description:
+      "Apply raw Google Slides API requests to a deck — the general editor behind everything structural " +
+      "or visual that slides_replace_text cannot do. Pass an array of request objects exactly as the " +
+      "Slides API defines them: insertText, deleteText, deleteObject, createSlide, duplicateObject, " +
+      "createShape, createTable, insertTableRows, createImage, replaceImage, updateTextStyle, " +
+      "updateParagraphStyle, updateShapeProperties, updatePageElementTransform, updateSlidesPosition, " +
+      "replaceAllShapesWithImage, and so on. Read the deck first (slides_read) to get objectIds to target. " +
+      "Returns the API replies, which carry ids for anything newly created.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        account,
+        presentation_id: { type: "string" },
+        requests: {
+          type: "array",
+          description:
+            "Slides API request objects, e.g. " +
+            '[{"insertText":{"objectId":"g123","text":"Hello","insertionIndex":0}}]',
+          items: { type: "object", additionalProperties: true },
+        },
+      },
+      required: ["account", "presentation_id", "requests"],
+    },
+    run: async (a) => {
+      requireWrites("slides_batch_update");
+      const requests = a.requests as unknown[];
+      if (!Array.isArray(requests) || requests.length === 0) {
+        throw new Error("requests must be a non-empty array of Slides API request objects");
+      }
+      const data = await api<{ replies?: unknown[] }>(
+        String(a.account),
+        "POST",
+        `${SLIDES}/${seg(String(a.presentation_id))}:batchUpdate`,
+        { body: { requests } },
+      );
+      return { applied: requests.length, replies: data.replies ?? [] };
+    },
+  },
+  {
+    name: "slides_get_thumbnail",
+    description:
+      "Render one slide to a PNG and return a temporary image URL, so a change can be checked by looking " +
+      "at it rather than trusting the text. Pass a slide objectId from slides_read.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        account,
+        presentation_id: { type: "string" },
+        slide_id: { type: "string", description: "Slide objectId from slides_read" },
+        size: {
+          type: "string",
+          enum: ["SMALL", "MEDIUM", "LARGE"],
+          default: "MEDIUM",
+          description: "Thumbnail size",
+        },
+      },
+      required: ["account", "presentation_id", "slide_id"],
+    },
+    run: async (a) => {
+      const data = await api<{ contentUrl?: string; width?: number; height?: number }>(
+        String(a.account),
+        "GET",
+        `${SLIDES}/${seg(String(a.presentation_id))}/pages/${seg(String(a.slide_id))}/thumbnail`,
+        { params: { "thumbnailProperties.thumbnailSize": String(a.size ?? "MEDIUM") } },
+      );
+      return { contentUrl: data.contentUrl, width: data.width, height: data.height };
     },
   },
   {
