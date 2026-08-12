@@ -738,6 +738,30 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: "drive_trash",
+    description:
+      "Move a Drive file to the trash, or restore it. Reversible: trashed files sit in the trash until " +
+      "it is emptied, which this tool does not do. Use it to clean up files this connector created.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        account,
+        file_id: { type: "string" },
+        restore: { type: "boolean", default: false, description: "Set true to pull the file back out of the trash" },
+      },
+      required: ["account", "file_id"],
+    },
+    run: async (a) => {
+      requireWrites("drive_trash");
+      return await api<Record<string, unknown>>(
+        String(a.account),
+        "PATCH",
+        `${DRIVE}/files/${seg(String(a.file_id))}`,
+        { params: { fields: "id,name,trashed", ...ALL_DRIVES }, body: { trashed: !a.restore } },
+      );
+    },
+  },
+  {
     name: "drive_share_file",
     description:
       "Grant one person access to a Drive file. Sends no email unless notify is set.",
