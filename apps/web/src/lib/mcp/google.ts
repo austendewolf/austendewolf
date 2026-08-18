@@ -158,6 +158,23 @@ async function uploadBytes<T>(
   return (await res.json()) as T;
 }
 
+/**
+ * GET binary bytes from a Google endpoint. `api` decodes as text, which mangles
+ * anything that is not UTF-8 — an exported .pptx or .png is bytes, so it needs
+ * its own path that reads the arrayBuffer intact.
+ */
+async function fetchBytes(account: string, url: string): Promise<Buffer> {
+  const token = await accessToken(account);
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(120_000),
+  });
+  if (!res.ok) {
+    throw new Error(`Google API error ${res.status}: ${(await res.text()).slice(0, 400)}`);
+  }
+  return Buffer.from(await res.arrayBuffer());
+}
+
 interface GmailPart {
   mimeType?: string;
   body?: { data?: string };
@@ -626,6 +643,43 @@ export const TOOLS: ToolDefinition[] = [
         name: meta.name,
         mimeType: mime,
         content: content.slice(0, Math.min(Number(a.limit ?? 20_000), 100_000)),
+      };
+    },
+  },
+  {
+    name: "drive_export",
+    description:
+      "Export a native Google file (Doc, Sheet, Slides) to a downloadable format and return the bytes " +
+      "as base64. The binary sibling of drive_read_file (which only gives text): use this to get an " +
+      "editable file out of Google — e.g. a Slides deck as .pptx to reuse as a template, or a Doc as " +
+      "PDF. Common target mime types: presentationml.presentation (.pptx), " +
+      "wordprocessingml.document (.docx), spreadsheetml.sheet (.xlsx), application/pdf, image/png.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        account,
+        file_id: { type: "string" },
+        mime_type: { type: "string", description: "Target export format, e.g. application/vnd.openxmlformats-officedocument.presentationml.presentation" },
+      },
+      required: ["account", "file_id", "mime_type"],
+    },
+    run: async (a) => {
+      const id = seg(String(a.file_id));
+      const meta = await api<{ name?: string }>(String(a.account), "GET", `${DRIVE}/files/${id}`, {
+        params: { fields: "name", ...ALL_DRIVES },
+      });
+      const url =
+        `${DRIVE}/files/${id}/export?mimeType=${encodeURIComponent(String(a.mime_type))}` +
+        `&supportsAllDrives=true`;
+      const bytes = await fetchBytes(String(a.account), url);
+      if (bytes.length > 30_000_000) {
+        throw new Error(`export is too large to return inline: ${bytes.length} bytes`);
+      }
+      return {
+        name: meta.name,
+        mimeType: String(a.mime_type),
+        bytes: bytes.length,
+        content_base64: bytes.toString("base64"),
       };
     },
   },
