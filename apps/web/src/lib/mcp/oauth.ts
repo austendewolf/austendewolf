@@ -17,19 +17,21 @@ const STATE_TTL_MS = 10 * 60 * 1000;
 /**
  * Everything the tools can ask for, and what a fresh consent requests.
  *
- * Every entry defaults on. An earlier version left the narrow read variants and
- * all of Slides off, on the reasoning that full `drive` already covers the Docs,
- * Sheets, and Slides APIs and a shorter consent screen is a smaller ask. That is
- * true, and it made the checkbox panel misleading: an unchecked box next to a
- * granted account reads as access that was refused rather than access that was
- * never requested. Asking for the whole catalogue keeps the panel a description
- * of the grant.
+ * Every entry defaults on, and the catalogue only lists scopes actually asked
+ * for. An earlier version listed the narrow read variants alongside the write
+ * ones but left them off, which made the checkbox panel misleading: an
+ * unchecked box next to a granted account reads as access that was refused
+ * rather than access that was never requested. The fix is not to request the
+ * read variants too, it is to leave them out of the catalogue entirely. Each
+ * write scope already implies its read counterpart (`gmail.modify` covers
+ * `gmail.readonly`, `drive` covers `drive.readonly`, and so on), so listing
+ * both doubled the consent screen without widening the grant. What is left is
+ * a one-to-one description of what was granted, with nothing unchecked.
  */
 export const SCOPE_CATALOG = [
   {
     service: "Gmail",
     scopes: [
-      { url: "https://www.googleapis.com/auth/gmail.readonly", label: "Read mail", default: true },
       {
         url: "https://www.googleapis.com/auth/gmail.modify",
         label: "Read, label, and archive",
@@ -45,18 +47,12 @@ export const SCOPE_CATALOG = [
   {
     service: "Calendar",
     scopes: [
-      {
-        url: "https://www.googleapis.com/auth/calendar.readonly",
-        label: "Read events",
-        default: true,
-      },
       { url: "https://www.googleapis.com/auth/calendar", label: "Full access", default: true },
     ],
   },
   {
     service: "Drive",
     scopes: [
-      { url: "https://www.googleapis.com/auth/drive.readonly", label: "Read files", default: true },
       // Comments are a Drive concern, not a Docs one, and creating them needs
       // more than drive.readonly.
       { url: "https://www.googleapis.com/auth/drive", label: "Full access", default: true },
@@ -65,11 +61,6 @@ export const SCOPE_CATALOG = [
   {
     service: "Docs",
     scopes: [
-      {
-        url: "https://www.googleapis.com/auth/documents.readonly",
-        label: "Read documents",
-        default: true,
-      },
       {
         url: "https://www.googleapis.com/auth/documents",
         label: "Read and edit documents",
@@ -81,11 +72,6 @@ export const SCOPE_CATALOG = [
     service: "Sheets",
     scopes: [
       {
-        url: "https://www.googleapis.com/auth/spreadsheets.readonly",
-        label: "Read spreadsheets",
-        default: true,
-      },
-      {
         url: "https://www.googleapis.com/auth/spreadsheets",
         label: "Read and edit spreadsheets",
         default: true,
@@ -95,11 +81,6 @@ export const SCOPE_CATALOG = [
   {
     service: "Slides",
     scopes: [
-      {
-        url: "https://www.googleapis.com/auth/presentations.readonly",
-        label: "Read presentations",
-        default: true,
-      },
       {
         url: "https://www.googleapis.com/auth/presentations",
         label: "Read and edit presentations",
