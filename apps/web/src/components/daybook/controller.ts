@@ -285,14 +285,17 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
   }
 
   /*
-   * The strip slides so the selected day sits at the left edge of the window,
-   * which keeps the day being read in one place while the others move under it.
-   * Days run newest first, so the earlier days are the ones to its right.
+   * The strip is a real scroller, so it drags and wheels both ways on its own.
+   * Picking a day only scrolls it to the left edge, which keeps the day being
+   * read in one place. Days run newest first, so the earlier ones are to its
+   * right.
    */
   function parkDay() {
     const sel = els.days.querySelector<HTMLElement>(".day.is-on")?.parentElement;
-    if (!sel) return;
-    els.days.style.transform = `translateX(${-sel.offsetLeft}px)`;
+    const vp = els.days.parentElement;
+    if (!sel || !vp) return;
+    const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    vp.scrollTo({ left: sel.offsetLeft, behavior: smooth ? "smooth" : "auto" });
   }
 
   function itemRow(id: string, it: Item, on: string, mode: Mode) {
@@ -742,7 +745,7 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
   let lastWidth = chartWidth();
   const onResize = () => {
     clearTimeout(resizeTimer);
-    // The strip parks against the window's right edge, so a narrower window moves it.
+    // The strip parks the selected day at the left edge, which a resize moves.
     parkDay();
     resizeTimer = setTimeout(() => { if (chartWidth() !== lastWidth) { lastWidth = chartWidth(); renderMain(); } }, 150);
   };
