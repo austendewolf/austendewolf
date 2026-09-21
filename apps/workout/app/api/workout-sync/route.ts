@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { workouts } from "@awd/db";
 import { getDb } from "@/lib/db";
 import { requireUser } from "@/lib/auth-server";
+import { authorizeMcp } from "@/lib/mcp-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,14 +17,30 @@ export const dynamic = "force-dynamic";
  * Returns { ok: true }.
  */
 
+/**
+ * Either a signed-in owner session or the static MCP token gets in.
+ *
+ * The browser holds a Supabase access token, which expires hourly and gets
+ * refreshed for it. Nothing off-device can do that. A phone automation posting
+ * an Apple Health workout, or a script posting a Garmin activity, has nowhere
+ * to run a refresh and nobody to prompt for a login, so it holds the same
+ * static token the MCP endpoint already accepts. The read path and the write
+ * path now agree on who the owner is.
+ */
+async function requireOwner(req: NextRequest): Promise<NextResponse | null> {
+  if (await authorizeMcp(req)) return null;
+  const auth = await requireUser(req);
+  return auth instanceof NextResponse ? auth : null;
+}
+
 function badId(id: string | null): id is null {
   if (!id) return true;
   return !/^[a-zA-Z0-9_-]{1,64}$/.test(id);
 }
 
 export async function GET(req: NextRequest) {
-  const auth = await requireUser(req);
-  if (auth instanceof NextResponse) return auth;
+  const denied = await requireOwner(req);
+  if (denied) return denied;
 
   const id = req.nextUrl.searchParams.get("id");
   if (badId(id)) {
@@ -47,8 +64,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireUser(req);
-  if (auth instanceof NextResponse) return auth;
+  const denied = await requireOwner(req);
+  if (denied) return denied;
 
   const id = req.nextUrl.searchParams.get("id");
   if (badId(id)) {
