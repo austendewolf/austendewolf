@@ -157,7 +157,10 @@
 .daybook .banner.ok { border-color: var(--green-shade); background: var(--hit-bg); }
 
 .daybook .rows { border-top: 1px solid var(--edge); }
-.daybook .row { display: grid; grid-template-columns: 16px 58px minmax(0, 1fr) auto; gap: 2px 12px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--edge); }
+/* State, when, who, what. Every cell starts at the top of the row and shares one
+   first-line height, so a title that wraps to two lines leaves its neighbours put. */
+.daybook .row { display: grid; grid-template-columns: 16px 18px 76px 72px minmax(0, 1fr) auto; gap: 2px 12px; align-items: start; padding: 9px 0; border-bottom: 1px solid var(--edge); }
+.daybook .row > * { line-height: 19px; }
 
 /* Drag to reorder. The lifted row follows the pointer, its neighbours slide out of the way, and on drop it settles into place with a small overshoot and a green wash. */
 .daybook .grip { align-self: start; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 22px; margin: -1px 0 0 -4px; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--rule); cursor: grab; touch-action: none; transition: color 120ms ease, transform 160ms ease; }
@@ -172,20 +175,22 @@
 .daybook.is-dragging, .daybook.is-dragging * { cursor: grabbing !important; user-select: none; }
 @keyframes daybook-landed { from { background: var(--hit-bg); box-shadow: 0 0 0 8px var(--hit-bg); } to { background: var(--bg); box-shadow: 0 0 0 8px transparent; } }
 .daybook .row.just-moved { animation: daybook-landed 900ms ease-out; }
-.daybook .age { font-family: var(--mono); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.daybook .row.is-old .age { color: var(--gap); }
+/* The mark and the date carry the urgency between them; nothing else in the row is coloured. */
+.daybook .row > .mark { display: flex; justify-content: center; color: var(--muted); }
+.daybook .mark-i { width: 15px; height: 15px; margin-top: 2px; }
+.daybook .who { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .daybook .item-t { color: var(--ink); font-size: 13.5px; }
 .daybook .meta { display: flex; flex-wrap: wrap; gap: 2px 10px; color: var(--na); font-size: 12px; margin-top: 2px; }
-.daybook .meta .kind { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; }
 .daybook .meta .when { color: var(--green-shade); }
-/* When it is owed. No date is a real answer, so it gets a chip like any other. */
+/* When it is owed. No date is a real answer, so it reads as one rather than as a blank. */
 .daybook .due { font-family: var(--mono); font-size: 11px; letter-spacing: 0.4px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.daybook .due.is-over, .daybook .due.is-now { color: var(--gap); font-weight: 700; }
-.daybook .due.is-none { color: var(--na); }
+.daybook .row.is-over .due, .daybook .row.is-over .mark { color: var(--gap); }
+.daybook .row.is-over .due { font-weight: 700; }
+.daybook .row.is-near .due, .daybook .row.is-near .mark { color: var(--amber); }
+.daybook .row.is-none .due, .daybook .row.is-none .mark { color: var(--na); }
 /* One quiet line naming what each column holds. */
-.daybook .row.is-cap { display: flex; align-items: baseline; gap: 12px; padding: 5px 0 4px; font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.1px; text-transform: uppercase; color: var(--na); white-space: nowrap; }
-.daybook .row.is-cap > span:first-child { display: none; }
-.daybook .row.is-cap > span:nth-child(3) { flex: 1; }
+.daybook .row.is-cap { padding: 5px 0 4px; font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.1px; text-transform: uppercase; color: var(--na); white-space: nowrap; }
+.daybook .row.is-cap > * { line-height: 12px; }
 .daybook .row.is-cap > *:last-child { text-align: right; }
 .daybook .row.is-done .item-t { color: var(--na); text-decoration: line-through; }
 .daybook .gap { color: var(--gap); }

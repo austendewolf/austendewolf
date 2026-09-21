@@ -51,18 +51,38 @@ const dayLabel = (d: string) => `${new Intl.DateTimeFormat("en-US", { weekday: "
 const weekday = (d: string) => new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" }).format(new Date(d + "T12:00:00Z"));
 const fmt = (h: number) => { let hr = Math.floor(h + 1e-9), m = Math.round((h - hr) * 60); if (m === 60) { hr++; m = 0; } return (hr % 12 || 12) + ":" + String(m).padStart(2, "0") + (hr >= 12 && hr < 24 ? "pm" : "am"); };
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
-const ageLabel = (first: string, on: string) => { const n = daysBetween(first, on); return n <= 0 ? "new" : n === 1 ? "1 day" : `${n} days`; };
 const isDate = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
 
 /* When a thing is actually needed. An item with no due date is a real category, not a bug. */
 function dueOf(it: Item | undefined) { return isDate(it?.due) ? it.due : null; }
-function dueChip(it: Item, on: string) {
+/* How near the due date is. The mark and the date wear this together, so urgency
+   reads from the colour of two small things rather than from a rule down the side. */
+function dueState(it: Item, on: string) {
   const d = dueOf(it);
-  if (!d) return `<span class="due is-none">no date</span>`;
+  if (!d) return { cls: "is-none", word: "no date" };
   const n = daysBetween(on, d);
-  const cls = n < 0 ? "is-over" : n === 0 ? "is-now" : "";
-  const word = n < 0 ? (n === -1 ? "due yesterday" : `${-n} days over`) : n === 0 ? "due today" : n === 1 ? "due tomorrow" : `due ${mmdd(d)}`;
-  return `<span class="due ${cls}">${word}</span>`;
+  return {
+    cls: n <= 0 ? "is-over" : n <= 2 ? "is-near" : "",
+    word: n < 0 ? (n === -1 ? "yesterday" : `${-n} days over`) : n === 0 ? "today" : n === 1 ? "tomorrow" : mmdd(d),
+  };
+}
+
+/* The notation from his paper page, one icon family, drawn on one grid. A dot is
+   open, a chevron moved to a later day, a cross no longer open, a bolt a reflection. */
+const MARKS: Record<string, string> = {
+  dot: `<circle cx="12" cy="12" r="3.4" fill="currentColor" stroke="none"/>`,
+  next: `<path d="M9 6l6 6-6 6"/>`,
+  shut: `<path d="M18 6 6 18M6 6l12 12"/>`,
+  bolt: `<path d="M13 3v7h6l-8 11v-7H5z"/>`,
+};
+const markIcon = (name: string) =>
+  `<svg class="mark-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${MARKS[name]}</svg>`;
+
+function markFor(it: Item, mode: Mode, on: string) {
+  if (it.kind === "note" || it.kind === "reflection") return "bolt";
+  if (mode === "closed") return "shut";
+  if (mode === "past") return it.status !== "open" && it.closed_on === on ? "shut" : "dot";
+  return mode === "later" ? "next" : "dot";
 }
 
 /* ---------- calendar: hints and conflicts only ---------- */
@@ -278,8 +298,6 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
     const old = it.status === "open" && daysBetween(it.first_seen, on) > OLD_DAYS;
     const mt = mode === "today" || mode === "later" ? meetingFor(it) : null;
     const meta = [
-      `<span class="kind">${esc(it.kind || "item")}</span>`,
-      mode === "today" || mode === "later" ? dueChip(it, on) : "",
       it.source ? (it.link ? `<a href="${esc(it.link)}" target="_blank" rel="noopener">${esc(it.source)}</a>` : `<span>${esc(it.source)}</span>`) : (it.link ? `<a href="${esc(it.link)}" target="_blank" rel="noopener">Open</a>` : ""),
       mt ? `<span class="when">${fmt(mt.s)}, ${esc(mt.t)}</span>` : "",
     ].join("");
@@ -298,7 +316,9 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
     const done = mode === "closed" || (mode === "past" && it.status !== "open" && it.closed_on === on);
     const sortable = mode === "today" || mode === "later";
     const grip = sortable ? `<button class="grip" data-id="${esc(id)}" aria-label="Reorder ${esc(it.title)}. Arrow keys move it up or down." title="Drag to reorder" ${dis}><svg viewBox="0 0 8 14" aria-hidden="true"><circle cx="2" cy="2" r="1.2"/><circle cx="6" cy="2" r="1.2"/><circle cx="2" cy="7" r="1.2"/><circle cx="6" cy="7" r="1.2"/><circle cx="2" cy="12" r="1.2"/><circle cx="6" cy="12" r="1.2"/></svg></button>` : "<span></span>";
-    return `<div class="row ${old ? "is-old" : ""} ${done ? "is-done" : ""}" ${sortable ? `data-id="${esc(id)}"` : ""}>${grip}<span class="age">${ageLabel(it.first_seen, on)}</span><div><div class="item-t">${esc(it.title)}</div><div class="meta">${meta}</div></div><div class="pills">${actions}</div></div>`;
+    const due = mode === "closed" ? { cls: "is-none", word: it.closed_on ? mmdd(it.closed_on) : "" } : dueState(it, on);
+    const who = it.person ? esc(it.person) : "";
+    return `<div class="row ${due.cls} ${old ? "is-old" : ""} ${done ? "is-done" : ""}" ${sortable ? `data-id="${esc(id)}"` : ""}>${grip}<span class="mark">${markIcon(markFor(it, mode, on))}</span><span class="due">${due.word}</span><span class="who">${who}</span><div><div class="item-t">${esc(it.title)}</div>${meta ? `<div class="meta">${meta}</div>` : ""}</div><div class="pills">${actions}</div></div>`;
   }
 
   function conflictRows() {
@@ -317,7 +337,7 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
         confirm = `<div class="pills left">${label ? `<button class="pill is-sm is-warn" id="confirm" ${state.busy ? "disabled" : ""}>${state.busy ? "Updating…" : label}</button>` : ""}<button class="pill is-sm is-quiet" id="unstage" ${state.busy ? "disabled" : ""}>Cancel</button></div>`;
         if (mine.length) confirm += `<div class="meta"><span class="gap">You organize ${mine.map((e) => esc(e.t)).join(", ")}. Move or cancel it in Google Calendar.</span></div>`;
       }
-      return `<div class="row is-old"><span></span><span class="age">${fmt(c[0].s)}</span><div><div class="item-t">Pick one: these meetings overlap</div><div class="pills left">${pills}</div>${confirm}</div><div class="pills"><span class="gap">${keep ? "" : "pick"}</span></div></div>`;
+      return `<div class="row is-old is-near"><span></span><span class="mark">${markIcon("next")}</span><span class="due">${fmt(c[0].s)}</span><span class="who"></span><div><div class="item-t">Pick one: these meetings overlap</div><div class="pills left">${pills}</div>${confirm}</div><div class="pills"><span class="gap">${keep ? "" : "pick"}</span></div></div>`;
     }).join("");
   }
 
@@ -339,7 +359,7 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
       if (db) return 1;
       return byPriority(a, b);
     };
-    const capRow = (last: string) => `<div class="row is-cap"><span></span><span>open</span><span>item</span><span>${last}</span></div>`;
+    const capRow = (last: string) => `<div class="row is-cap"><span></span><span></span><span>due</span><span>who</span><span>task</span><span>${last}</span></div>`;
     let h = `<h1 class="title">${weekday(on)} <span>${mmdd(on)}</span></h1>`;
 
     if (!state.ready) {
