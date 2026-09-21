@@ -38,7 +38,13 @@ The list lives in one store. The `daybook` schema is live on the site's database
 
 **Google Tasks** reaches the gateway as `tasks_list`, `tasks_list_tasklists` and `tasks_complete`, on the `tasks` scope. Tasks exposes no created date, so an undated task is dated from the dated heading above it in the source Doc, which the task's `links` array names. This replaced a Chrome scrape that could not run in a scheduled session at all.
 
-**Mail** is a capture surface on both accounts, decided 09/21/2026. Austen keeps no label and does not star, so nothing in Gmail marks a message as his to do and no marker-based route was available. The morning run reads the unread inbox it already reads, decides which messages are really things he owes someone, and offers each one as an item in the same confirmation block as its proposed actions. Only a yes writes it. An offer has to clear three bars first: the thing needs him rather than anyone else, it is still undone when checked against the underlying object rather than the unread flag, and it is not already on the list. Items carry the account and the message permalink, so the row opens the thread it came from.
+**Mail** is a capture surface on both accounts, decided 09/21/2026, with two routes.
+
+The flag is the one Austen drives. He flags in his mail client, which maps to Gmail's `STARRED` label over IMAP, so `is:starred` reads exactly what he marked, and a flagged message means a thing he owes someone. Every flag becomes an item. Then the run clears `STARRED` and `INBOX` on that message, which is the whole reason the route works: he stopped flagging because the pile grew and nothing drained it, and now the flag reads as "I saw this, it is on the list, get it out of my inbox". A flag is never consumed before its item is written. The backlog on the first run gets offered rather than imported, because some of it is months dead.
+
+The proposal pass covers what he did not flag. The run reads the unread inbox it already reads, decides which messages are really his, and offers each as an item in the same confirmation block as its proposed actions; only a yes writes it. An offer clears three bars first: the thing needs him rather than anyone else, it is still undone when checked against the underlying object rather than the unread flag, and it is not already on the list.
+
+Items from either route carry the account and the message link, so the row opens the thread it came from.
 
 **Slack Later** is still unbuilt, and it is the only capture surface left. Reminders work on the public API through `reminders.list`. Saved items do not: `stars.list` was deprecated for this and returns nothing saved through Later, and no public Later API exists. The only route is `saved.list`, the internal web client endpoint, which Austen chose on 09/21/2026 knowing it is unsupported.
 
