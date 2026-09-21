@@ -117,20 +117,18 @@
 .daybook .days-vp::after { right: 0; background: linear-gradient(270deg, var(--bg), transparent); }
 .daybook .days { display: flex; gap: 8px; list-style: none; margin: 0; padding: 0; transition: transform 320ms cubic-bezier(0.22, 0.7, 0.2, 1); }
 .daybook .days > li { flex: none; }
-.daybook .day { display: flex; align-items: center; gap: 7px; white-space: nowrap; background: none; border: 1px solid var(--edge); border-radius: 999px; padding: 5px 12px; cursor: pointer; color: var(--muted); font-family: var(--mono); font-size: 12px; font-weight: 500; }
-.daybook .day:hover { border-color: var(--na); color: var(--ink); }
-.daybook .day.is-on { border-color: var(--green-shade); color: var(--green-shade); background: var(--hit-bg); }
-.daybook .day.is-today { border-color: var(--green-shade); color: var(--green-shade); }
-.daybook .day .dd { font-size: 10.5px; color: var(--na); }
-.daybook .day.is-on .dd, .daybook .day.is-full .dd { color: inherit; opacity: 0.7; }
+/* Every day is outlined in green. The selected one fills with it. */
+.daybook .day { display: flex; align-items: center; gap: 7px; white-space: nowrap; background: none; border: 1px solid var(--green-shade); border-radius: 999px; padding: 5px 12px; cursor: pointer; color: var(--green-shade); font-family: var(--mono); font-size: 12px; font-weight: 500; }
+.daybook .day:hover { background: var(--hit-bg); }
+.daybook .day.is-on { background: var(--green-shade); color: var(--knock); }
+.daybook .day .dd { font-size: 10.5px; opacity: 0.6; }
 @media (prefers-reduced-motion: reduce) { .daybook .days { transition: none; } }
 
-/* Every day carries the same slot: an open ring until the three are closed, then a check. */
-.daybook .day.is-full { border-color: var(--green-shade); color: var(--green-shade); }
+/* Every day carries the same slot: a faint ring until the three are closed, then a check. */
 .daybook .seal { flex: none; width: 14px; height: 14px; }
-.daybook .seal circle { fill: var(--bg); stroke: var(--rule); stroke-width: 1.2; }
-.daybook .seal path { fill: none; stroke: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-.daybook .is-full .seal circle, .daybook .is-full .seal path { stroke: var(--green-shade); }
+.daybook .seal circle { fill: none; stroke: currentColor; stroke-width: 1.2; opacity: 0.4; }
+.daybook .seal path { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.daybook .is-full .seal circle { opacity: 1; }
 
 .daybook .sub { color: var(--muted); margin: 0; font-variant-numeric: tabular-nums; }
 

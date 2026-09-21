@@ -271,8 +271,8 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
   /* ---------- views ---------- */
   function renderRail() {
     const today = todayPT();
-    // Oldest first, so the strip reads as a timeline running left into the past.
-    const dates = Array.from(new Set([today, ...Object.keys(state.days)])).filter((d) => d <= today).sort();
+    // Newest first: the selected day parks at the left, so its past runs right.
+    const dates = Array.from(new Set([today, ...Object.keys(state.days)])).filter((d) => d <= today).sort().reverse();
     els.days.innerHTML = dates.map((d) => {
       const doc = state.days[d];
       const closed = (doc?.closed || []).length;
@@ -285,16 +285,14 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
   }
 
   /*
-   * The strip slides so the selected day ends at the right edge of the window,
-   * which keeps the day you are reading in one place while its history runs off
-   * to the left. Today selected puts today on the right and every earlier day
-   * beside it, which is the shape the page opens in.
+   * The strip slides so the selected day sits at the left edge of the window,
+   * which keeps the day being read in one place while the others move under it.
+   * Days run newest first, so the earlier days are the ones to its right.
    */
   function parkDay() {
     const sel = els.days.querySelector<HTMLElement>(".day.is-on")?.parentElement;
-    const vp = els.days.parentElement;
-    if (!sel || !vp) return;
-    els.days.style.transform = `translateX(${Math.min(0, vp.clientWidth - sel.offsetLeft - sel.offsetWidth)}px)`;
+    if (!sel) return;
+    els.days.style.transform = `translateX(${-sel.offsetLeft}px)`;
   }
 
   function itemRow(id: string, it: Item, on: string, mode: Mode) {
