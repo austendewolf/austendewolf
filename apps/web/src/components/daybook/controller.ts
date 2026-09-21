@@ -321,7 +321,9 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
     const sortable = mode === "today" || mode === "later";
     const grip = sortable ? `<button class="grip" data-id="${esc(id)}" aria-label="Reorder ${esc(it.title)}. Arrow keys move it up or down." title="Drag to reorder" ${dis}><svg viewBox="0 0 8 14" aria-hidden="true"><circle cx="2" cy="2" r="1.2"/><circle cx="6" cy="2" r="1.2"/><circle cx="2" cy="7" r="1.2"/><circle cx="6" cy="7" r="1.2"/><circle cx="2" cy="12" r="1.2"/><circle cx="6" cy="12" r="1.2"/></svg></button>` : "<span></span>";
     const due = mode === "closed" ? { cls: "is-none", word: it.closed_on ? mmdd(it.closed_on) : "" } : dueState(it, on);
-    const who = it.person ? esc(it.person) : "";
+    // The person rides with the words rather than holding a column of its own,
+    // since most items name nobody and the column sat empty across the page.
+    const who = it.person ? `<span class="who">${esc(it.person)}</span>` : "";
     /*
      * Every title is capped so a long one cannot own the page: two lines while
      * the item is open, one line once it closes, where the row is a record
@@ -330,7 +332,7 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
      */
     const shut = !state.opened[id];
     const more = `<button class="more" data-more="${esc(id)}">${shut ? "More" : "Less"}</button>`;
-    return `<div class="row ${due.cls} ${old ? "is-old" : ""} ${done ? "is-done" : ""} ${shut ? "is-shut" : ""}" ${sortable ? `data-id="${esc(id)}"` : ""}>${grip}<span class="mark">${markIcon(markFor(it, mode, on))}</span><span class="due">${due.word}</span><span class="who">${who}</span><div class="cell"><div class="item-t">${esc(it.title)}</div>${meta ? `<div class="meta">${meta}</div>` : ""}${more}</div><div class="pills">${actions}</div></div>`;
+    return `<div class="row ${due.cls} ${old ? "is-old" : ""} ${done ? "is-done" : ""} ${shut ? "is-shut" : ""}" ${sortable ? `data-id="${esc(id)}"` : ""}>${grip}<span class="mark">${markIcon(markFor(it, mode, on))}</span><span class="due">${due.word}</span><div class="cell"><div class="item-t">${esc(it.title)}${who}</div>${meta ? `<div class="meta">${meta}</div>` : ""}${more}</div><div class="pills">${actions}</div></div>`;
   }
 
   function conflictRows() {
@@ -349,7 +351,7 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
         confirm = `<div class="pills left">${label ? `<button class="pill is-sm is-warn" id="confirm" ${state.busy ? "disabled" : ""}>${state.busy ? "Updating…" : label}</button>` : ""}<button class="pill is-sm is-quiet" id="unstage" ${state.busy ? "disabled" : ""}>Cancel</button></div>`;
         if (mine.length) confirm += `<div class="meta"><span class="gap">You organize ${mine.map((e) => esc(e.t)).join(", ")}. Move or cancel it in Google Calendar.</span></div>`;
       }
-      return `<div class="row is-old is-near"><span></span><span class="mark">${markIcon("next")}</span><span class="due">${fmt(c[0].s)}</span><span class="who"></span><div><div class="item-t">Pick one: these meetings overlap</div><div class="pills left">${pills}</div>${confirm}</div><div class="pills"><span class="gap">${keep ? "" : "pick"}</span></div></div>`;
+      return `<div class="row is-old is-near"><span></span><span class="mark">${markIcon("next")}</span><span class="due">${fmt(c[0].s)}</span><div><div class="item-t">Pick one: these meetings overlap</div><div class="pills left">${pills}</div>${confirm}</div><div class="pills"><span class="gap">${keep ? "" : "pick"}</span></div></div>`;
     }).join("");
   }
 
@@ -371,7 +373,7 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
       if (db) return 1;
       return byPriority(a, b);
     };
-    const capRow = (last: string) => `<div class="row is-cap"><span></span><span></span><span>due</span><span>who</span><span>task</span><span>${last}</span></div>`;
+    const capRow = (last: string) => `<div class="row is-cap"><span></span><span></span><span>due</span><span>task</span><span>${last}</span></div>`;
     // The strip above already names the day, so the page opens straight on its counts.
     let h = "";
 

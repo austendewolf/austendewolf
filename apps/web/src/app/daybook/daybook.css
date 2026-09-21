@@ -151,7 +151,7 @@
 .daybook .banner.ok { border-color: var(--green-shade); background: var(--hit-bg); }
 
 .daybook .rows { border-top: 1px solid var(--edge); }
-/* State, when, who, what. Every cell starts at the top of the row and shares one
+/* State, when, what. Every cell starts at the top of the row and shares one
    first-line height, so a title that wraps to two lines leaves its neighbours put. */
 /*
  * A row runs the full width of the window so its rule reaches both edges of the
@@ -159,7 +159,7 @@
  * negative margin and the padding are the same figure, so the text sits where it
  * would have anyway.
  */
-.daybook .row { display: grid; grid-template-columns: 16px 18px 76px 72px minmax(0, 1fr) auto; gap: 2px 12px; align-items: start; margin-inline: calc(50% - 50vw); padding: 9px calc(50vw - 50% + 20px); border-bottom: 1px solid var(--edge); }
+.daybook .row { display: grid; grid-template-columns: 16px 18px 76px minmax(0, 1fr) auto; gap: 2px 12px; align-items: start; margin-inline: calc(50% - 50vw); padding: 9px calc(50vw - 50% + 20px); border-bottom: 1px solid var(--edge); }
 .daybook .row > * { line-height: 19px; }
 
 /* Drag to reorder. The lifted row follows the pointer, its neighbours slide out of the way, and on drop it settles into place with a small overshoot and a green wash. */
@@ -178,7 +178,8 @@
 /* The mark and the date carry the urgency between them; nothing else in the row is coloured. */
 .daybook .row > .mark { display: flex; justify-content: center; color: var(--muted); }
 .daybook .mark-i { width: 15px; height: 15px; margin-top: 2px; }
-.daybook .who { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A tag on the end of the words, so it wraps with them and takes no width when absent. */
+.daybook .who { margin-left: 7px; padding: 1px 6px; border: 1px solid var(--edge); border-radius: 999px; color: var(--muted); font-family: var(--mono); font-size: 10.5px; white-space: nowrap; }
 .daybook .item-t { color: var(--ink); font-size: 13.5px; }
 
 /*
@@ -252,6 +253,8 @@
 @media (max-width: 640px) {
   .daybook .days-vp { margin-inline: -16px; padding-inline: 16px; }
   .daybook .row { grid-template-columns: 16px 48px minmax(0, 1fr); padding-inline: calc(50vw - 50% + 14px); }
+  /* The words drop under the mark and the date, which is where the who tag now rides. */
+  .daybook .row > .cell { grid-column: 3; }
   .daybook .row > .pills { grid-column: 3; justify-content: flex-start; margin-top: 6px; }
 }
 @media (prefers-reduced-motion: reduce) { .daybook .pill, .daybook .grip, .daybook .rows.is-sorting > .row[data-id]:not(.is-lifted) { transition: none; } .daybook .row.just-moved { animation: none; } }
