@@ -15,6 +15,7 @@ const DRIVE_UPLOAD = "https://www.googleapis.com/upload/drive/v3";
 const DOCS = "https://docs.googleapis.com/v1/documents";
 const SHEETS = "https://sheets.googleapis.com/v4/spreadsheets";
 const SLIDES = "https://slides.googleapis.com/v1/presentations";
+const TASKS = "https://tasks.googleapis.com/tasks/v1";
 
 const WRITES_ALLOWED = (process.env.MCP_ALLOW_WRITES ?? "1") !== "0";
 
@@ -1751,6 +1752,97 @@ export const TOOLS: ToolDefinition[] = [
         { params: { fields: "id,content,action,createdTime" }, body },
       );
       return data;
+    },
+  },
+  {
+    name: "tasks_list_tasklists",
+    description: "The task lists on the account. Most people have one, named after them.",
+    inputSchema: {
+      type: "object",
+      properties: { account },
+      required: ["account"],
+    },
+    run: async (a) => {
+      const data = await api<{ items?: Array<Record<string, unknown>> }>(
+        String(a.account),
+        "GET",
+        `${TASKS}/users/@me/lists`,
+        { params: { maxResults: 100 } },
+      );
+      return {
+        lists: (data.items ?? []).map((l) => ({ id: l.id, title: l.title, updated: l.updated })),
+      };
+    },
+  },
+  {
+    name: "tasks_list",
+    description:
+      "Open tasks on a list, the default list unless one is named. Each carries its links, which is " +
+      "how a task assigned inside a Google Doc names the doc it came from. Google Tasks records no " +
+      "created date, so `updated` is the only timestamp and it moves on every edit.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        account,
+        tasklist: { type: "string", description: "List id from tasks_list_tasklists. Defaults to the default list." },
+        show_completed: { type: "boolean", default: false },
+        max_results: { type: "integer", default: 100, maximum: 100 },
+      },
+      required: ["account"],
+    },
+    run: async (a) => {
+      const list = a.tasklist === undefined ? "@default" : String(a.tasklist);
+      const completed = Boolean(a.show_completed);
+      const data = await api<{ items?: Array<Record<string, unknown>> }>(
+        String(a.account),
+        "GET",
+        `${TASKS}/lists/${seg(list)}/tasks`,
+        {
+          params: {
+            maxResults: Math.min(Number(a.max_results ?? 100), 100),
+            showCompleted: completed,
+            // Asking for completed tasks without this returns none of them.
+            showHidden: completed,
+          },
+        },
+      );
+      return {
+        tasks: (data.items ?? []).map((t) => ({
+          id: t.id,
+          title: t.title,
+          notes: t.notes,
+          due: t.due,
+          status: t.status,
+          completed: t.completed,
+          updated: t.updated,
+          parent: t.parent,
+          links: t.links,
+        })),
+      };
+    },
+  },
+  {
+    name: "tasks_complete",
+    description: "Mark a task done.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        account,
+        task_id: { type: "string" },
+        tasklist: { type: "string", description: "Defaults to the default list." },
+      },
+      required: ["account", "task_id"],
+    },
+    run: async (a) => {
+      requireWrites("tasks_complete");
+      const list = a.tasklist === undefined ? "@default" : String(a.tasklist);
+      const data = await api<Record<string, unknown>>(
+        String(a.account),
+        "PATCH",
+        `${TASKS}/lists/${seg(list)}/tasks/${seg(String(a.task_id))}`,
+        { body: { status: "completed" } },
+      );
+      return { id: data.id, title: data.title, status: data.status, completed: data.completed };
     },
   },
 ];

@@ -51,6 +51,12 @@ export const SCOPE_CATALOG = [
     ],
   },
   {
+    service: "Tasks",
+    scopes: [
+      { url: "https://www.googleapis.com/auth/tasks", label: "Full access", default: true },
+    ],
+  },
+  {
     service: "Drive",
     scopes: [
       // Comments are a Drive concern, not a Docs one, and creating them needs
