@@ -15,7 +15,17 @@ import { isAllowed } from "@awd/auth";
  * Named `proxy` because the `middleware` file convention is deprecated in this
  * version of Next.
  */
+/** The host that exists to open the Daybook and nothing else. */
+const NOTEBOOK_HOST = "notebook.austendewolf.com";
+
 export async function proxy(request: NextRequest) {
+  // notebook.austendewolf.com is a front door for one page, so its root goes there.
+  if (request.headers.get("host") === NOTEBOOK_HOST && request.nextUrl.pathname === "/") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/daybook";
+    return NextResponse.redirect(url);
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
