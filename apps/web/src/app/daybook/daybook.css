@@ -175,6 +175,19 @@
 .daybook .mark-i { width: 15px; height: 15px; margin-top: 2px; }
 .daybook .who { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .daybook .item-t { color: var(--ink); font-size: 13.5px; }
+
+/*
+ * A long title is capped rather than allowed to run: two lines while the item is
+ * open, one line once it closes, where the row is a record and not something to
+ * act on. A closed row drops its source line too. The More button is removed
+ * after layout on any row that never hit the cap.
+ */
+.daybook .row.is-shut .item-t { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.daybook .row.is-done.is-shut .item-t { -webkit-line-clamp: 1; }
+.daybook .row.is-done.is-shut .meta { display: none; }
+.daybook .more { margin-top: 3px; padding: 0; background: none; border: 0; cursor: pointer; color: var(--na); font-family: var(--mono); font-size: 11px; letter-spacing: 0.3px; }
+.daybook .more:hover { color: var(--green-shade); }
+.daybook .more[disabled] { cursor: default; }
 .daybook .meta { display: flex; flex-wrap: wrap; gap: 2px 10px; color: var(--na); font-size: 12px; margin-top: 2px; }
 .daybook .meta .when { color: var(--green-shade); }
 /* When it is owed. No date is a real answer, so it reads as one rather than as a blank. */

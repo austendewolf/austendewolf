@@ -136,6 +136,7 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
     calLoading: true, calError: null as string | null,
     stage: null as { key: string; keepId: string } | null, busy: false, flash: null as { ok: boolean; text: string } | null,
     pendingPrio: {} as Record<string, number>,   // priorities written locally that the server hasn't confirmed yet
+    opened: {} as Record<string, true>,          // rows whose full title he asked to see
   };
   let drag: Drag | null = null, holdUntil = 0, holdTimer: ReturnType<typeof setTimeout> | undefined;
   try { const v = JSON.parse(localStorage.getItem(FOLD_KEY) || "null"); if (v) state.folded = { ...state.folded, ...v }; } catch {}
@@ -320,7 +321,15 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
     const grip = sortable ? `<button class="grip" data-id="${esc(id)}" aria-label="Reorder ${esc(it.title)}. Arrow keys move it up or down." title="Drag to reorder" ${dis}><svg viewBox="0 0 8 14" aria-hidden="true"><circle cx="2" cy="2" r="1.2"/><circle cx="6" cy="2" r="1.2"/><circle cx="2" cy="7" r="1.2"/><circle cx="6" cy="7" r="1.2"/><circle cx="2" cy="12" r="1.2"/><circle cx="6" cy="12" r="1.2"/></svg></button>` : "<span></span>";
     const due = mode === "closed" ? { cls: "is-none", word: it.closed_on ? mmdd(it.closed_on) : "" } : dueState(it, on);
     const who = it.person ? esc(it.person) : "";
-    return `<div class="row ${due.cls} ${old ? "is-old" : ""} ${done ? "is-done" : ""}" ${sortable ? `data-id="${esc(id)}"` : ""}>${grip}<span class="mark">${markIcon(markFor(it, mode, on))}</span><span class="due">${due.word}</span><span class="who">${who}</span><div><div class="item-t">${esc(it.title)}</div>${meta ? `<div class="meta">${meta}</div>` : ""}</div><div class="pills">${actions}</div></div>`;
+    /*
+     * Every title is capped so a long one cannot own the page: two lines while
+     * the item is open, one line once it closes, where the row is a record
+     * rather than something to act on. The cap lifts on click, and the More
+     * button is dropped after render on any row the cap never reached.
+     */
+    const shut = !state.opened[id];
+    const more = `<button class="more" data-more="${esc(id)}">${shut ? "More" : "Less"}</button>`;
+    return `<div class="row ${due.cls} ${old ? "is-old" : ""} ${done ? "is-done" : ""} ${shut ? "is-shut" : ""}" ${sortable ? `data-id="${esc(id)}"` : ""}>${grip}<span class="mark">${markIcon(markFor(it, mode, on))}</span><span class="due">${due.word}</span><span class="who">${who}</span><div class="cell"><div class="item-t">${esc(it.title)}</div>${meta ? `<div class="meta">${meta}</div>` : ""}${more}</div><div class="pills">${actions}</div></div>`;
   }
 
   function conflictRows() {
@@ -455,7 +464,26 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
       if (addedIds.length) h += `<div class="sect">New that day <span class="n">${addedIds.length}</span></div><div class="rows">${addedIds.map((id) => itemRow(id, state.items[id], on, "past")).join("")}</div>`;
     }
     els.main.innerHTML = h;
+    trimMore();
   }
+
+  /*
+   * A title that fits its cap needs no control, and the cap is a CSS clamp, so
+   * only the laid-out element knows. Anything that never overflowed loses its
+   * button here, which leaves the control on exactly the rows it does something
+   * for.
+   */
+  function trimMore() {
+    els.main.querySelectorAll<HTMLElement>(".row").forEach((row) => {
+      const btn = row.querySelector<HTMLElement>(".more");
+      const t = row.querySelector<HTMLElement>(".item-t");
+      if (!btn || !t) return;
+      // A closed row also hides its source line, so that alone keeps the button.
+      const hidesMeta = row.classList.contains("is-done") && !!row.querySelector(".meta");
+      if (row.classList.contains("is-shut") && !hidesMeta && t.scrollHeight <= t.clientHeight + 1) btn.remove();
+    });
+  }
+
   const render = () => { renderRail(); renderMain(); };
 
   /* ---------- writes ---------- */
@@ -559,6 +587,13 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
     if (day) { state.selected = day.dataset.day!; state.stage = null; state.flash = null; try { history.replaceState(history.state, "", "#" + state.selected); } catch {} render(); return; }
     const fold = target.closest<HTMLElement>("[data-fold]");
     if (fold) { const k = fold.dataset.fold as "today" | "later"; state.folded[k] = !state.folded[k]; saveFold(); renderMain(); return; }
+    const m = target.closest<HTMLElement>("[data-more]");
+    if (m) {
+      const id = m.dataset.more!;
+      if (state.opened[id]) delete state.opened[id]; else state.opened[id] = true;
+      renderMain();
+      return;
+    }
     const a = target.closest<HTMLButtonElement>("[data-act]");
     if (a && !a.disabled) { act(a.dataset.act!, a.dataset.id!); return; }
     const k = target.closest<HTMLButtonElement>("[data-keep]");
