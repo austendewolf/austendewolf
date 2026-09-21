@@ -436,6 +436,86 @@ export interface ToolDefinition {
 
 const account = { type: "string", description: "Which connected Google account to act as" };
 
+/**
+ * Calendar events with attendees intact.
+ *
+ * `calendar_list_events` flattens attendees to a count, which is right for a
+ * caller skimming a day and useless to the Daybook, which has to know who is
+ * in a meeting and how the account answered. Both read through here.
+ */
+export async function listCalendarEvents(
+  acct: string,
+  options: { timeMin: string; timeMax: string; calendarId?: string; query?: string; maxResults?: number },
+): Promise<Array<Record<string, unknown>>> {
+  const data = await api<{ items?: Array<Record<string, unknown>> }>(
+    acct,
+    "GET",
+    `${CALENDAR}/calendars/${seg(options.calendarId ?? "primary")}/events`,
+    {
+      params: {
+        timeMin: options.timeMin,
+        timeMax: options.timeMax,
+        q: options.query,
+        singleEvents: true,
+        orderBy: "startTime",
+        maxResults: Math.min(options.maxResults ?? 25, 250),
+      },
+    },
+  );
+  return data.items ?? [];
+}
+
+export type CalendarResponse = "accepted" | "declined" | "tentative";
+
+/**
+ * Answer an invitation as the account.
+ *
+ * Reads the event with `maxAttendees=1`, which returns only the account's own
+ * attendee entry, and patches that entry back with `attendeesOmitted`. Google
+ * documents that pair as the way to change one guest's response without
+ * resending, and so risking, everyone else's.
+ *
+ * Declining a meeting the account organizes is refused. Google would record
+ * it, but the meeting would still go ahead with everyone else in it, which is
+ * not what declining means.
+ */
+export async function respondToEvent(
+  acct: string,
+  eventId: string,
+  response: CalendarResponse,
+  options: { calendarId?: string; comment?: string; sendUpdates?: "all" | "externalOnly" | "none" } = {},
+): Promise<{ id: string; summary: string | null; responseStatus: string; changed: boolean }> {
+  const url = `${CALENDAR}/calendars/${seg(options.calendarId ?? "primary")}/events/${seg(eventId)}`;
+  const event = await api<{
+    id: string;
+    summary?: string;
+    organizer?: { self?: boolean };
+    attendees?: Array<{ email?: string; self?: boolean; responseStatus?: string }>;
+  }>(acct, "GET", url, { params: { maxAttendees: 1, fields: "id,summary,organizer,attendees" } });
+
+  const summary = event.summary ?? null;
+  if (event.organizer?.self && response === "declined") {
+    throw new Error(`You organize '${summary ?? eventId}'. Move or cancel it in Google Calendar instead.`);
+  }
+  const self = event.attendees?.find((a) => a.self);
+  if (!self?.email) {
+    // An organizer with no guest entry has nothing to answer.
+    if (event.organizer?.self) return { id: event.id, summary, responseStatus: "accepted", changed: false };
+    throw new Error(`'${acct}' is not on the guest list for '${summary ?? eventId}'.`);
+  }
+  if (self.responseStatus === response && options.comment === undefined) {
+    return { id: event.id, summary, responseStatus: response, changed: false };
+  }
+
+  const attendee: Record<string, unknown> = { email: self.email, responseStatus: response };
+  if (options.comment !== undefined) attendee.comment = options.comment;
+  await api(acct, "PATCH", url, {
+    params: { sendUpdates: options.sendUpdates ?? "none", fields: "id" },
+    body: { attendees: [attendee], attendeesOmitted: true },
+  });
+  return { id: event.id, summary, responseStatus: response, changed: true };
+}
+
 export const TOOLS: ToolDefinition[] = [
   {
     name: "gmail_search",
@@ -557,23 +637,15 @@ export const TOOLS: ToolDefinition[] = [
       required: ["account", "time_min", "time_max"],
     },
     run: async (a) => {
-      const data = await api<{ items?: Array<Record<string, unknown>> }>(
-        String(a.account),
-        "GET",
-        `${CALENDAR}/calendars/${seg(String(a.calendar_id ?? "primary"))}/events`,
-        {
-          params: {
-            timeMin: String(a.time_min),
-            timeMax: String(a.time_max),
-            q: a.query === undefined ? undefined : String(a.query),
-            singleEvents: true,
-            orderBy: "startTime",
-            maxResults: Math.min(Number(a.max_results ?? 25), 250),
-          },
-        },
-      );
+      const items = await listCalendarEvents(String(a.account), {
+        timeMin: String(a.time_min),
+        timeMax: String(a.time_max),
+        calendarId: String(a.calendar_id ?? "primary"),
+        query: a.query === undefined ? undefined : String(a.query),
+        maxResults: Number(a.max_results ?? 25),
+      });
       return {
-        events: (data.items ?? []).map((ev) => ({
+        events: items.map((ev) => ({
           id: ev.id,
           summary: ev.summary,
           start: ev.start,
@@ -584,6 +656,42 @@ export const TOOLS: ToolDefinition[] = [
           hangoutLink: ev.hangoutLink,
         })),
       };
+    },
+  },
+  {
+    name: "calendar_respond",
+    description:
+      "Accept, decline, or tentatively accept a calendar event as the account. Changes only the " +
+      "account's own response. Refuses to decline an event the account organizes. Pass the event " +
+      "id from calendar_list_events; for a recurring meeting that answers just that occurrence.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        account,
+        event_id: { type: "string" },
+        response: { type: "string", enum: ["accepted", "declined", "tentative"] },
+        calendar_id: { type: "string", default: "primary" },
+        comment: { type: "string", description: "Optional note shown to the organizer" },
+        send_updates: {
+          type: "string",
+          enum: ["all", "externalOnly", "none"],
+          default: "none",
+          description: "Whether Google emails the change",
+        },
+      },
+      required: ["account", "event_id", "response"],
+    },
+    run: async (a) => {
+      requireWrites("calendar_respond");
+      const response = String(a.response);
+      if (response !== "accepted" && response !== "declined" && response !== "tentative") {
+        throw new Error("response must be accepted, declined or tentative");
+      }
+      return respondToEvent(String(a.account), String(a.event_id), response, {
+        calendarId: String(a.calendar_id ?? "primary"),
+        comment: a.comment === undefined ? undefined : String(a.comment),
+        sendUpdates: (a.send_updates as "all" | "externalOnly" | "none" | undefined) ?? "none",
+      });
     },
   },
   {

@@ -57,6 +57,16 @@ export async function proxy(request: NextRequest) {
     return redirect;
   }
 
+  // The Daybook is the owner's own list, so it is never shown to a visitor
+  // without a session. Anyone else holding one was already signed out above;
+  // the page and its actions still check for the owner themselves.
+  if (!user && request.nextUrl.pathname.startsWith("/daybook")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.search = `?next=${encodeURIComponent("/daybook")}`;
+    return NextResponse.redirect(url);
+  }
+
   return response;
 }
 

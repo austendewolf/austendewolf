@@ -2,12 +2,13 @@ import { bearerMatches, mcpTokens } from "@awd/auth";
 
 import { listAccounts } from "@/lib/mcp/accounts";
 import { ADMIN_TOOLS } from "@/lib/mcp/admin";
+import { DAYBOOK_TOOLS } from "@/lib/mcp/daybook";
 import { TOOLS } from "@/lib/mcp/google";
 import { resolveUpstream, upstreamTools } from "@/lib/mcp/registry";
 import { GATEWAY_HEADER } from "@/lib/mcp/upstream";
 
-// Google APIs plus the tools that manage this server's own connections.
-const ALL_TOOLS = [...TOOLS, ...ADMIN_TOOLS];
+// Google APIs, the Daybook, and the tools that manage this server's own connections.
+const ALL_TOOLS = [...TOOLS, ...DAYBOOK_TOOLS, ...ADMIN_TOOLS];
 
 // Route handlers are uncached by default in this version, and only GET can opt
 // in, so POST needs no cache configuration. `runtime` is still a valid segment
