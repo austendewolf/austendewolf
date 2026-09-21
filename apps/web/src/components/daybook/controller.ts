@@ -39,7 +39,6 @@ const REFRESH_MS = 60_000;
 /** Three is the day's list. Closing three seals the day in the rail. */
 const CAP = 3;
 const FOLD_KEY = "daybook.folded";
-const RAIL_KEY = "daybook.rail";
 
 /* ---------- dates, all Pacific ---------- */
 const partsOf = (d: Date) => Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(d).map((p) => [p.type, p.value]));
@@ -141,17 +140,6 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
   let drag: Drag | null = null, holdUntil = 0, holdTimer: ReturnType<typeof setTimeout> | undefined;
   try { const v = JSON.parse(localStorage.getItem(FOLD_KEY) || "null"); if (v) state.folded = { ...state.folded, ...v }; } catch {}
   const saveFold = () => { try { localStorage.setItem(FOLD_KEY, JSON.stringify(state.folded)); } catch {} };
-
-  /*
-   * The rail can be pushed off to the left, leaving each day as the right half
-   * of its own pill: the date, the seal, and a squared-off edge where the
-   * weekday used to be. The chart reads the main column's width when it draws,
-   * so a collapse has to redraw it.
-   */
-  let railShut = false;
-  try { railShut = localStorage.getItem(RAIL_KEY) === "shut"; } catch {}
-  const applyRail = () => root.classList.toggle("is-narrow", railShut);
-  applyRail();
 
   /* ---------- day shape ---------- */
   const WORK_S = 8, WORK_E = 18, STEP = 0.25, MIN_BLOCK = 0.5;
@@ -282,16 +270,30 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
   /* ---------- views ---------- */
   function renderRail() {
     const today = todayPT();
-    const dates = Array.from(new Set([today, ...Object.keys(state.days)])).filter((d) => d <= today).sort().reverse();
+    // Oldest first, so the strip reads as a timeline running left into the past.
+    const dates = Array.from(new Set([today, ...Object.keys(state.days)])).filter((d) => d <= today).sort();
     els.days.innerHTML = dates.map((d) => {
       const doc = state.days[d];
       const closed = (doc?.closed || []).length;
       // A day is sealed once three are closed, which is the whole point of the cap.
       const full = closed >= CAP;
-      const mark = d === today ? "today" : closed ? `${closed} closed` : "";
-      const seal = `<svg class="seal" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6"/><path d="M4.2 7.2 6.2 9.2 9.8 4.8"/></svg>`;
-      return `<li><button class="day ${d === today ? "is-today" : ""} ${full ? "is-full" : ""} ${d === state.selected ? "is-on" : ""}" data-day="${d}" aria-current="${d === state.selected ? "date" : "false"}" title="${dayLabel(d)}, ${full ? "closed your three" : `${closed} closed`}"><span class="wd">${weekday(d).slice(0, 3)}</span><span class="dd">${mmdd(d)}</span><span class="mark">${mark}</span>${full ? seal : ""}</button></li>`;
+      const seal = `<svg class="seal" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6"/>${full ? `<path d="M4.2 7.2 6.2 9.2 9.8 4.8"/>` : ""}</svg>`;
+      return `<li><button class="day ${d === today ? "is-today" : ""} ${full ? "is-full" : ""} ${d === state.selected ? "is-on" : ""}" data-day="${d}" aria-current="${d === state.selected ? "date" : "false"}" title="${dayLabel(d)}, ${full ? "closed your three" : `${closed} closed`}">${seal}<span class="wd">${d === today ? "Today" : weekday(d)}</span><span class="dd">${mmdd(d)}</span></button></li>`;
     }).join("");
+    parkDay();
+  }
+
+  /*
+   * The strip slides so the selected day ends at the right edge of the window,
+   * which keeps the day you are reading in one place while its history runs off
+   * to the left. Today selected puts today on the right and every earlier day
+   * beside it, which is the shape the page opens in.
+   */
+  function parkDay() {
+    const sel = els.days.querySelector<HTMLElement>(".day.is-on")?.parentElement;
+    const vp = els.days.parentElement;
+    if (!sel || !vp) return;
+    els.days.style.transform = `translateX(${Math.min(0, vp.clientWidth - sel.offsetLeft - sel.offsetWidth)}px)`;
   }
 
   function itemRow(id: string, it: Item, on: string, mode: Mode) {
@@ -360,7 +362,8 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
       return byPriority(a, b);
     };
     const capRow = (last: string) => `<div class="row is-cap"><span></span><span></span><span>due</span><span>who</span><span>task</span><span>${last}</span></div>`;
-    let h = `<h1 class="title">${weekday(on)} <span>${mmdd(on)}</span></h1>`;
+    // The strip above already names the day, so the page opens straight on its counts.
+    let h = "";
 
     if (!state.ready) {
       h += `<p class="sub">Loading your items…</p>`;
@@ -554,13 +557,6 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
     const target = ev.target as Element;
     const day = target.closest<HTMLElement>("[data-day]");
     if (day) { state.selected = day.dataset.day!; state.stage = null; state.flash = null; try { history.replaceState(history.state, "", "#" + state.selected); } catch {} render(); return; }
-    if (target.closest("[data-rail]")) {
-      railShut = !railShut;
-      try { localStorage.setItem(RAIL_KEY, railShut ? "shut" : "open"); } catch {}
-      applyRail();
-      renderMain();
-      return;
-    }
     const fold = target.closest<HTMLElement>("[data-fold]");
     if (fold) { const k = fold.dataset.fold as "today" | "later"; state.folded[k] = !state.folded[k]; saveFold(); renderMain(); return; }
     const a = target.closest<HTMLButtonElement>("[data-act]");
@@ -713,6 +709,8 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
   let lastWidth = chartWidth();
   const onResize = () => {
     clearTimeout(resizeTimer);
+    // The strip parks against the window's right edge, so a narrower window moves it.
+    parkDay();
     resizeTimer = setTimeout(() => { if (chartWidth() !== lastWidth) { lastWidth = chartWidth(); renderMain(); } }, 150);
   };
   window.addEventListener("resize", onResize);
