@@ -70,7 +70,7 @@ export function AccountRow({ signedIn }: { signedIn: boolean }) {
           <span className="title-block-value">A-04</span>
         </Link>
         <Link href="/account/password" className="title-block-row title-block-link">
-          <span className="title-block-label">Password</span>
+          <span className="title-block-label">Sign-in</span>
           <span className="title-block-value">A-05</span>
         </Link>
         {/* A form, not a link: a GET that destroys a session can be fired by a

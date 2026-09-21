@@ -2,7 +2,9 @@ import { PasskeyManager } from "@/components/passkey-manager";
 import { PasswordForm } from "@/components/password-form";
 import { getViewer } from "@/lib/mcp/owner";
 
-export const metadata = { title: "Password — Austen DeWolf" };
+// The page covers both routes in, so it is named for what it settles rather
+// than for the password half. The path stays, since recovery links point at it.
+export const metadata = { title: "Sign-in — Austen DeWolf" };
 export const runtime = "nodejs";
 
 export default async function PasswordPage() {
@@ -11,10 +13,10 @@ export default async function PasswordPage() {
   if (!viewer.isOwner) {
     return (
       <div className="mx-auto max-w-sm px-6 py-24">
-        <h1 className="text-3xl font-bold tracking-tight">Password</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Sign-in</h1>
         <p className="mt-3 text-sm text-muted-foreground">
-          Sign in first. A one-time link works if you do not have a password yet
-          — that is the point of this page.
+          Sign in first. A one-time link works if you have neither a passkey nor
+          a password yet, which is what this page is for.
         </p>
         <a
           href="/login?next=%2Faccount%2Fpassword"
@@ -28,7 +30,7 @@ export default async function PasswordPage() {
 
   return (
     <div className="mx-auto max-w-sm px-6 py-24">
-      <h1 className="text-3xl font-bold tracking-tight">Password</h1>
+      <h1 className="text-3xl font-bold tracking-tight">Sign-in</h1>
       <p className="mt-2 text-sm text-muted-foreground">{viewer.email}</p>
 
       <div className="mt-8">
