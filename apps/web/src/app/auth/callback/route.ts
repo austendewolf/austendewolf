@@ -51,7 +51,10 @@ export async function GET(request: Request) {
     return reject(origin, "This site is private. That account cannot sign in here.");
   }
 
-  return NextResponse.redirect(new URL(next, origin));
+  // A recovery link exists to set a new password, so it lands on that page
+  // rather than on the site root with nothing said about why you are here.
+  const landing = type === "recovery" && next === "/" ? "/account/password" : next;
+  return NextResponse.redirect(new URL(landing, origin));
 }
 
 /**
