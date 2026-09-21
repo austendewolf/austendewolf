@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 
 import { LoginForm } from "@/components/login-form";
-import { PasskeyButton } from "@/components/passkey-button";
 import { getViewer } from "@/lib/mcp/owner";
 
 export const metadata = {
@@ -32,16 +31,7 @@ export default async function LoginPage({
         </p>
       )}
 
-      <div className="mt-8 space-y-6">
-        {/* The passkey comes first because it is the route that should be used. */}
-        <PasskeyButton next={safeNext(next)} />
-
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="h-px flex-1 bg-border/50" />
-          or
-          <span className="h-px flex-1 bg-border/50" />
-        </div>
-
+      <div className="mt-8">
         <LoginForm next={safeNext(next)} />
       </div>
     </div>
