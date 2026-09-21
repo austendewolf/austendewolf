@@ -9,27 +9,45 @@ import { signIn, type LoginState } from "@/app/login/actions";
 const FIELD =
   "w-full border border-border/60 bg-transparent px-3 py-2 text-sm outline-none focus:border-accent";
 
-/**
- * Sign in: a stack of routes, one per line, with nothing between them.
- *
- * An earlier version put every field of every route on screen at once, divided
- * by two "or" rules, so the page opened on a password box whether or not that
- * was the route being taken. This opens on the choice instead, and the fields
- * for a route appear once it is picked.
- *
- * Touch ID leads when the device has it, because it is the route that should be
- * used. The check runs in the browser and the button stays off the page
- * entirely when it comes back false, which is what happens in a development
- * session: the passkey is bound to `austendewolf.com` and not to localhost.
- *
- * Password and link share one email field and travel as `intent`, so each
- * submits and works without JavaScript.
- */
-type Route = "pick" | "password" | "link";
+/* A route reads as a row: its icon on the left edge, its label starting where
+   every other label starts. Centred text would make three unrelated widths. */
+const ROUTE = "w-full justify-start gap-3 px-3";
 
+const Icon = ({ d }: { d: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d={d} />
+  </svg>
+);
+/* Three arcs around one centre. A denser fingerprint collapses into a blob at 14px. */
+const TOUCH = "M12 11v6M8.5 8.5a5 5 0 0 1 7 4.5v4M5 6.5a9 9 0 0 1 14 3.5v3";
+const MAIL = "M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM3 7l9 6 9-6";
+const LOCK = "M5 13a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2zM8 11V7a4 4 0 1 1 8 0v4";
+
+/**
+ * Sign in: one email field, then the routes that email can take.
+ *
+ * An earlier version put every field of every route on screen at once, cut by
+ * two "or" rules, so the page opened on a password box whether or not that was
+ * the route being taken. A version after that opened on the routes alone and
+ * made you pick before typing anything, which cost a step and threw the address
+ * away when you changed your mind.
+ *
+ * The address comes first because both email routes need it and neither needs
+ * anything else. Asking for a password reveals the field in place, so what has
+ * already been typed carries forward.
+ *
+ * Touch ID leads when the device has the hardware, because it is the route that
+ * should be used and it needs no address at all. The check runs in the browser
+ * and the button stays off the page when it comes back false, which is what
+ * happens in a development session: the passkey is bound to `austendewolf.com`
+ * and not to localhost.
+ *
+ * Which button was pressed travels as `intent`, so this submits and works
+ * without JavaScript, with the password field shown from the start.
+ */
 export function LoginForm({ next = "/" }: { next?: string }) {
   const [state, action, pending] = useActionState<LoginState, FormData>(signIn, {});
-  const [route, setRoute] = useState<Route>("pick");
+  const [withPassword, setWithPassword] = useState(false);
   const [passkeys, setPasskeys] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,41 +96,8 @@ export function LoginForm({ next = "/" }: { next?: string }) {
     );
   }
 
-  if (route === "pick") {
-    return (
-      <div className="space-y-3">
-        {passkeys && (
-          <Button type="button" onClick={usePasskey} disabled={busy} className="w-full">
-            {busy ? "Waiting for your device..." : "Continue with Touch ID"}
-          </Button>
-        )}
-        <Button
-          type="button"
-          variant={passkeys ? "outline" : "default"}
-          onClick={() => setRoute("link")}
-          className="w-full"
-        >
-          Email me a sign-in link
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={() => setRoute("password")}
-          className="w-full"
-        >
-          Use a password
-        </Button>
-        {error && (
-          <p className="text-sm text-destructive" role="alert">
-            {error}
-          </p>
-        )}
-      </div>
-    );
-  }
-
   return (
-    <form action={action} className="space-y-4">
+    <form action={action} className="space-y-3">
       <input type="hidden" name="next" value={next} />
 
       <div className="space-y-2">
@@ -125,13 +110,12 @@ export function LoginForm({ next = "/" }: { next?: string }) {
           type="email"
           autoComplete="username"
           required
-          autoFocus
           className={FIELD}
         />
       </div>
 
-      {route === "password" && (
-        <div className="space-y-2">
+      {withPassword && (
+        <div className="space-y-2 pb-1">
           <label htmlFor="password" className="block text-xs text-muted-foreground">
             Password
           </label>
@@ -140,33 +124,44 @@ export function LoginForm({ next = "/" }: { next?: string }) {
             name="password"
             type="password"
             autoComplete="current-password"
+            autoFocus
             className={FIELD}
           />
         </div>
       )}
 
-      <Button
-        type="submit"
-        name="intent"
-        value={route}
-        disabled={pending}
-        className="w-full"
-      >
-        {pending ? "Working..." : route === "password" ? "Sign in" : "Send the link"}
-      </Button>
+      {withPassword ? (
+        <Button type="submit" name="intent" value="password" disabled={pending} className={ROUTE}>
+          <Icon d={LOCK} />
+          {pending ? "Working..." : "Sign in"}
+        </Button>
+      ) : (
+        <Button type="submit" name="intent" value="link" disabled={pending} className={ROUTE}>
+          <Icon d={MAIL} />
+          {pending ? "Working..." : "Email me a sign-in link"}
+        </Button>
+      )}
+
+      {passkeys && !withPassword && (
+        <Button type="button" variant="outline" onClick={usePasskey} disabled={busy} className={ROUTE}>
+          <Icon d={TOUCH} />
+          {busy ? "Waiting for your device..." : "Continue with Touch ID"}
+        </Button>
+      )}
 
       <Button
         type="button"
         variant="ghost"
-        onClick={() => setRoute("pick")}
-        className="w-full"
+        onClick={() => setWithPassword(!withPassword)}
+        className={ROUTE}
       >
-        Back
+        <Icon d={withPassword ? MAIL : LOCK} />
+        {withPassword ? "Email me a link instead" : "Use a password"}
       </Button>
 
-      {state.error && (
+      {(state.error || error) && (
         <p className="text-sm text-destructive" role="alert">
-          {state.error}
+          {state.error || error}
         </p>
       )}
     </form>
