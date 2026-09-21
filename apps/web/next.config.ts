@@ -3,6 +3,10 @@ import path from "node:path";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // The dev server answers on local.austendewolf.com so a passkey enrolled on
+  // the real domain works against it. Next refuses dev assets to any host it
+  // was not told about, so this names it.
+  allowedDevOrigins: ["local.austendewolf.com"],
   // Stamped once, when the build runs. The footer prints this as the revision
   // date, and it has to be frozen at build: the layout renders per request, so
   // anything computed at render would just be "now".

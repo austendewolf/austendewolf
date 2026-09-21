@@ -4,14 +4,20 @@
     {
       "name": "austendewolf",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "web", "dev", "--port", "3100"],
-      "port": 3100
-    },
-    {
-      "name": "workout",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "workout", "dev", "--port", "3200"],
-      "port": 3200
+      "runtimeArgs": [
+        "--filter",
+        "web",
+        "dev",
+        "--port",
+        "3100",
+        "--experimental-https",
+        "--experimental-https-key",
+        "certificates/local-key.pem",
+        "--experimental-https-cert",
+        "certificates/local.pem"
+      ],
+      "port": 3100,
+      "url": "https://local.austendewolf.com:3100"
     }
   ]
 }
