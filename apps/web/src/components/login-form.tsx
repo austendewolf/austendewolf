@@ -24,6 +24,19 @@ const MAIL = "M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2
 const LOCK = "M5 13a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2zM8 11V7a4 4 0 1 1 8 0v4";
 
 /**
+ * What the device calls its own unlock. A Mac says Touch ID, a Windows machine
+ * says Windows Hello, and anything else gets the generic name rather than a
+ * wrong brand. Face ID is not named: an iPhone that has it still offers Touch ID
+ * on other devices in the same account, so the neutral wording is safer there.
+ */
+function unlockName() {
+  const ua = navigator.userAgent;
+  if (/Mac|iPhone|iPad|iPod/.test(ua)) return "Touch ID";
+  if (/Windows/.test(ua)) return "Windows Hello";
+  return "your device";
+}
+
+/**
  * Sign in: one email field, then the routes that email can take.
  *
  * An earlier version put every field of every route on screen at once, cut by
@@ -48,17 +61,19 @@ const LOCK = "M5 13a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H7a2 2 0 0 1-2
 export function LoginForm({ next = "/" }: { next?: string }) {
   const [state, action, pending] = useActionState<LoginState, FormData>(signIn, {});
   const [withPassword, setWithPassword] = useState(false);
-  const [passkeys, setPasskeys] = useState(false);
+  const [passkeys, setPasskeys] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const api = typeof window === "undefined" ? undefined : window.PublicKeyCredential;
+    // No WebAuthn, or no built-in authenticator: the browser says so before any
+    // prompt, so the button never reaches a machine that cannot use it.
     if (!api?.isUserVerifyingPlatformAuthenticatorAvailable) return;
     let live = true;
     api
       .isUserVerifyingPlatformAuthenticatorAvailable()
-      .then((ok) => { if (live) setPasskeys(ok); })
+      .then((ok) => { if (live && ok) setPasskeys(unlockName()); })
       .catch(() => {});
     return () => { live = false; };
   }, []);
@@ -75,8 +90,8 @@ export function LoginForm({ next = "/" }: { next?: string }) {
         // credential still did not work: no passkey is enrolled, or this origin
         // is not the one it is bound to. Either way the route is not available
         // here, so it stops being offered for the rest of the visit.
-        setPasskeys(false);
-        setError("Touch ID did not work here. Take one of the other routes.");
+        setPasskeys(null);
+        setError(`${passkeys} did not work here. Take one of the other routes.`);
       }
       return;
     }
@@ -153,7 +168,7 @@ export function LoginForm({ next = "/" }: { next?: string }) {
       {passkeys && !withPassword && (
         <Button type="button" variant="outline" onClick={usePasskey} disabled={busy} className={ROUTE}>
           <Icon d={TOUCH} />
-          {busy ? "Waiting for your device..." : "Continue with Touch ID"}
+          {busy ? "Waiting for your device..." : `Continue with ${passkeys}`}
         </Button>
       )}
 
