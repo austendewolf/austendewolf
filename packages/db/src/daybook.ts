@@ -8,6 +8,7 @@ import {
   pgSchema,
   text,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -48,6 +49,12 @@ export const daybookItems = daybookSchema.table(
     priority: integer("priority"),
     /** The date he last dragged this row. The morning run keeps these in his order. */
     rankedByHand: date("ranked_by_hand"),
+    /**
+     * When it is owed, when anyone said. Null is the normal case: most of the
+     * list has no date and sorts under "no date yet" rather than under a
+     * deadline someone invented for it.
+     */
+    due: date("due"),
     /** An email, matched against meeting attendees. */
     person: text("person"),
     link: text("link"),
@@ -80,12 +87,75 @@ export const daybookDays = daybookSchema.table("days", {
   focus: text("focus").array().default(sql`'{}'::text[]`).notNull(),
   added: text("added").array().default(sql`'{}'::text[]`).notNull(),
   closed: text("closed").array().default(sql`'{}'::text[]`).notNull(),
-  /** Meeting load the page recorded: `{ meetings_h, double_h, items_today }`. */
-  load: jsonb("load").$type<{ meetings_h: number; double_h: number; items_today: number }>(),
+  /**
+   * Meeting load the page recorded, plus `cal`: the day's drawn shape, kept so
+   * an earlier date redraws what that day actually looked like instead of
+   * today's calendar.
+   */
+  load: jsonb("load").$type<{
+    meetings_h: number;
+    double_h: number;
+    items_today: number;
+    cal?: {
+      ev: Array<{ t: string; s: number; e: number }>;
+      out: Array<{ s: number; e: number }>;
+      held: Array<{ t: string; s: number; e: number }>;
+    };
+  }>(),
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
     .defaultNow()
     .notNull(),
 });
+
+/**
+ * What made an item show up, on whatever surface it came from.
+ *
+ * The list has many front doors: a chat session, a flagged email, a calendar
+ * invite, a Slack save, a Google Task, a notebook page. They are triggers, and
+ * several of them routinely point at one thing he has to do. A meeting gets
+ * booked, the invite arrives by mail, someone chases it in Slack, and all three
+ * are the same action. So a trigger attaches to an item rather than being one,
+ * and an item carries as many as it collects.
+ *
+ * `(surface, account, external_id)` is unique, and that is the duplicate guard
+ * that does not depend on judgment: one Gmail message, one calendar event, one
+ * task id can attach exactly once no matter how many runs see it. Judgment only
+ * decides WHICH item it attaches to, and being wrong there is a re-parent,
+ * which is cheap. Being wrong the other way produces two rows meaning one
+ * thing, which is the failure this table exists to prevent.
+ *
+ * `title` keeps what the trigger itself said, because the item's title gets
+ * rewritten as an action and the original wording is what makes a later match
+ * checkable.
+ */
+export const daybookTriggers = daybookSchema.table(
+  "triggers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => daybookItems.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    /** mail, calendar, slack, tasks, chat, notebook. Open-ended, so not a check. */
+    surface: text("surface").notNull(),
+    /**
+     * work or personal, where the surface has accounts. Empty rather than null,
+     * because Postgres counts nulls as distinct and a nullable column here
+     * would let the same message attach twice.
+     */
+    account: text("account").default("").notNull(),
+    /** The id on that surface: a Gmail message id, an event id, a task id, a Slack ts. */
+    externalId: text("external_id").notNull(),
+    link: text("link"),
+    /** What the trigger said, before the item's title was rewritten as an action. */
+    title: text("title"),
+    seenAt: timestamp("seen_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    unique("triggers_external_key").on(t.surface, t.account, t.externalId),
+    index("triggers_item_idx").on(t.itemId),
+    index("triggers_surface_idx").on(t.surface, t.seenAt),
+  ],
+);
 
 /**
  * One scanned notebook page, and what reading it changed.
@@ -113,3 +183,5 @@ export type DaybookItem = typeof daybookItems.$inferSelect;
 export type NewDaybookItem = typeof daybookItems.$inferInsert;
 export type DaybookDay = typeof daybookDays.$inferSelect;
 export type DaybookCapture = typeof daybookCaptures.$inferSelect;
+export type DaybookTrigger = typeof daybookTriggers.$inferSelect;
+export type NewDaybookTrigger = typeof daybookTriggers.$inferInsert;

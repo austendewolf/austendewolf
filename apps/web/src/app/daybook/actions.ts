@@ -36,12 +36,14 @@ export type Result<T> = { ok: true; data: T } | { ok: false; code: string };
 export interface CalendarEvent {
   id: string;
   summary?: string;
+  /** Read only to tell a block he holds for himself from a meeting someone booked. */
+  description?: string;
   status?: string;
   eventType?: string;
   start?: { dateTime?: string; date?: string };
   end?: { dateTime?: string; date?: string };
   organizer?: { self?: boolean };
-  attendees?: Array<{ email?: string; self?: boolean; responseStatus?: string }>;
+  attendees?: Array<{ email?: string; self?: boolean; resource?: boolean; responseStatus?: string }>;
 }
 
 function codeOf(err: unknown): string {
@@ -125,7 +127,13 @@ export async function saveLoadAction(date: string, load: NonNullable<Day["load"]
     const numbers = [load?.meetings_h, load?.double_h, load?.items_today];
     if (numbers.some((n) => typeof n !== "number" || !Number.isFinite(n))) throw new Error("load must be numbers");
     return setDay(assertDate(date), {
-      load: { meetings_h: load.meetings_h, double_h: load.double_h, items_today: load.items_today },
+      load: {
+        meetings_h: load.meetings_h,
+        double_h: load.double_h,
+        items_today: load.items_today,
+        // The day's drawn shape, so an earlier date redraws itself rather than today.
+        ...(load.cal ? { cal: load.cal } : {}),
+      },
     });
   });
 }
@@ -154,6 +162,7 @@ export async function calendarAction(date: string): Promise<Result<{ events: Cal
       return {
         id: ev.id,
         summary: ev.summary,
+        description: ev.description,
         status: ev.status,
         eventType: ev.eventType,
         start: ev.start,
@@ -162,6 +171,7 @@ export async function calendarAction(date: string): Promise<Result<{ events: Cal
         attendees: (ev.attendees ?? []).map((a) => ({
           email: a.email,
           self: a.self,
+          resource: a.resource,
           responseStatus: a.responseStatus,
         })),
       };

@@ -41,6 +41,10 @@
   --green: light-dark(var(--monochromatic-primary), var(--monochromatic-tertiary));
   --green-shade: light-dark(var(--monochromatic-secondary), var(--monochromatic-primary));
   --amber: var(--triadic-secondary);
+  /* Time someone else took. Green is his own, so a meeting needs a hue that is
+     neither of the two the theme already spends. */
+  --blue: light-dark(#3f6fd8, #7d9ef0);
+  --blue-soft: color-mix(in srgb, var(--blue) 13%, var(--bg));
 
   --bg: light-dark(#fbfbfb, #101010);
   /* Borders are alpha rather than solid, so one token stops reading as three
@@ -107,6 +111,12 @@
 .daybook .day.is-on { border-color: var(--na); color: var(--strong); }
 .daybook .day.is-today { border-color: var(--green-shade); color: var(--green-shade); }
 .daybook .day .mark { font-size: 10.5px; color: var(--na); overflow: hidden; text-overflow: ellipsis; }
+/* Every day carries the same slot: an open ring until the three are closed, then a check. */
+.daybook .day.is-full { border-color: var(--green-shade); color: var(--green-shade); }
+.daybook .seal { flex: none; width: 14px; height: 14px; }
+.daybook .seal circle { fill: var(--bg); stroke: var(--rule); stroke-width: 1.2; }
+.daybook .seal path { fill: none; stroke: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.daybook .is-full .seal circle, .daybook .is-full .seal path { stroke: var(--green-shade); }
 
 .daybook .title { display: flex; align-items: baseline; gap: 10px; margin: 0; line-height: 1; font-size: 22px; font-weight: 700; letter-spacing: -0.3px; color: var(--strong); }
 .daybook .title span { font-family: var(--mono); font-weight: 500; font-size: 20px; letter-spacing: 0.6px; }
@@ -115,6 +125,16 @@
 .daybook .sect { font-family: var(--mono); font-weight: 700; font-size: 11px; letter-spacing: 1.3px; text-transform: uppercase; color: var(--green-shade); margin: 28px 0 6px; display: flex; gap: 8px; align-items: baseline; }
 .daybook .sect::before { content: '·'; }
 .daybook .sect .n { color: var(--na); font-weight: 500; letter-spacing: 0.4px; }
+.daybook .sect .n.gap { color: var(--gap); }
+.daybook .sect .n.ok { color: var(--green-shade); }
+/* A section header you can shut. The marker replaces the dot the plain header uses. */
+.daybook .sect.is-head { cursor: pointer; user-select: none; }
+.daybook .sect.is-head:hover { color: var(--ink); }
+.daybook .sect.is-head::before { content: '▾'; font-size: 9px; width: 8px; }
+.daybook .sect.is-head.is-shut::before { content: '▸'; }
+.daybook .folded { display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 10px 0; border-top: 1px solid var(--edge); border-bottom: 1px solid var(--edge); color: var(--muted); font-variant-numeric: tabular-nums; }
+.daybook .folded b { font-family: var(--mono); font-weight: 500; color: var(--strong); }
+.daybook .folded .is-gap, .daybook .folded .is-gap b { color: var(--gap); }
 .daybook .note { color: var(--muted); margin: 0 0 8px; max-width: 65ch; }
 .daybook .banner { border-left: 2px solid var(--gap); padding: 6px 12px; margin: 14px 0 0; background: var(--gap-soft); max-width: 70ch; }
 .daybook .banner.ok { border-color: var(--green-shade); background: var(--hit-bg); }
@@ -141,6 +161,15 @@
 .daybook .meta { display: flex; flex-wrap: wrap; gap: 2px 10px; color: var(--na); font-size: 12px; margin-top: 2px; }
 .daybook .meta .kind { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; }
 .daybook .meta .when { color: var(--green-shade); }
+/* When it is owed. No date is a real answer, so it gets a chip like any other. */
+.daybook .due { font-family: var(--mono); font-size: 11px; letter-spacing: 0.4px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.daybook .due.is-over, .daybook .due.is-now { color: var(--gap); font-weight: 700; }
+.daybook .due.is-none { color: var(--na); }
+/* One quiet line naming what each column holds. */
+.daybook .row.is-cap { display: flex; align-items: baseline; gap: 12px; padding: 5px 0 4px; font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.1px; text-transform: uppercase; color: var(--na); white-space: nowrap; }
+.daybook .row.is-cap > span:first-child { display: none; }
+.daybook .row.is-cap > span:nth-child(3) { flex: 1; }
+.daybook .row.is-cap > *:last-child { text-align: right; }
 .daybook .row.is-done .item-t { color: var(--na); text-decoration: line-through; }
 .daybook .gap { color: var(--gap); }
 .daybook .ok { color: var(--green-shade); }
@@ -167,25 +196,23 @@
 .daybook .stat span { color: var(--muted); }
 .daybook .stat.is-gap b { color: var(--gap); }
 .daybook .chart-wrap { overflow-x: auto; }
-.daybook svg.load { display: block; width: 100%; min-width: 520px; touch-action: none; }
+.daybook svg.load { display: block; touch-action: none; }
 .daybook svg.load text { font-family: var(--mono); font-size: 10.5px; fill: var(--muted); }
 .daybook .c-grid { fill: var(--rule); }
 .daybook .c-axis { stroke: var(--edge); stroke-width: 1; fill: none; }
-.daybook .c-over { fill: var(--gap-soft); }
-.daybook .c-line { fill: none; stroke: var(--green-shade); stroke-width: 1.5; }
-.daybook .c-fill { fill: var(--hit-bg); }
-.daybook .c-clash { stroke: var(--gap); stroke-width: 3; fill: none; }
+/* A meeting is someone else's time, so it reads blue; a block he held for
+   himself reads green, at the same height as one meeting. */
+.daybook .c-meet { fill: var(--blue-soft); stroke: var(--blue); stroke-width: 1; }
+.daybook .c-meet.is-clash { fill: color-mix(in srgb, var(--blue) 26%, var(--bg)); }
+.daybook .c-hold { fill: var(--hit-bg); stroke: var(--green-shade); stroke-width: 1; }
 .daybook .c-out { fill: none; stroke: var(--rule); stroke-dasharray: 2 2; }
 .daybook .c-free { fill: var(--green); opacity: 0.55; }
 .daybook .c-free.is-past { fill: var(--rule); opacity: 0.6; }
 .daybook .c-past { fill: var(--bg); opacity: 0.55; }
 .daybook .c-now { stroke: var(--ink); stroke-width: 1; fill: none; }
-.daybook .c-item { fill: var(--bg); stroke: var(--green-shade); stroke-width: 1.5; }
 .daybook svg.load text.c-gap { fill: var(--gap); }
 .daybook svg.load text.c-ink { fill: var(--ink); }
 .daybook svg.load text.c-ok { fill: var(--green-shade); }
-.daybook .readout { min-height: 20px; font-family: var(--mono); font-size: 11.5px; color: var(--na); }
-.daybook .readout.gap { color: var(--gap); }
 
 @media (max-width: 640px) {
   .daybook .shell { grid-template-columns: minmax(0, 1fr); gap: 14px; }

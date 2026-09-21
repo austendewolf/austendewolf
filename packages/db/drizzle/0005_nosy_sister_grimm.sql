@@ -1,0 +1,1 @@
+ALTER TABLE "daybook"."items" ADD COLUMN "due" date;

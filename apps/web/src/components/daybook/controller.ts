@@ -25,16 +25,20 @@ import type { Day, Item } from "@/lib/daybook/store";
 
 type Snapshot = { items: Record<string, Item>; days: Record<string, Day> };
 type Entry = [string, Item];
-type Ev = { id: string; t: string; s: number; e: number; rsvp: string; organizer: boolean; out: boolean; emails: string[] };
-type Bin = { h: number; on: Ev[]; n: number; out: boolean; work: boolean };
+type Ev = { id: string; t: string; s: number; e: number; rsvp: string; organizer: boolean; out: boolean; focus: boolean; emails: string[] };
+type Held = { t: string; s: number; e: number };
+type Bin = { h: number; on: Ev[]; n: number; out: boolean; hold: boolean; held: boolean; work: boolean };
 type Block = { s: number; e: number };
-type Shape = { S: number; E: number; now: number; open: Block[]; freeLeft: number; meetingH: number; meetingLeft: number; doubleH: number; pins: Array<{ m: Ev; items: Item[] }> };
+type Shape = { S: number; E: number; now: number; open: Block[]; freeLeft: number; meetingH: number; meetingLeft: number; doubleH: number; heldLeft: number; stolen: number; held: Held[] };
 type Mode = "today" | "later" | "closed" | "past";
 type Drag = { id: string; row: HTMLElement; list: HTMLElement; rows: HTMLElement[]; rects: DOMRect[]; from: number; to: number; startY: number; pointerId: number };
 
 const TZ = "America/Los_Angeles";
 const OLD_DAYS = 7;
 const REFRESH_MS = 60_000;
+/** Three is the day's list. Closing three seals the day in the rail. */
+const CAP = 3;
+const FOLD_KEY = "daybook.folded";
 
 /* ---------- dates, all Pacific ---------- */
 const partsOf = (d: Date) => Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(d).map((p) => [p.type, p.value]));
@@ -47,13 +51,35 @@ const weekday = (d: string) => new Intl.DateTimeFormat("en-US", { weekday: "long
 const fmt = (h: number) => { let hr = Math.floor(h + 1e-9), m = Math.round((h - hr) * 60); if (m === 60) { hr++; m = 0; } return (hr % 12 || 12) + ":" + String(m).padStart(2, "0") + (hr >= 12 && hr < 24 ? "pm" : "am"); };
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
 const ageLabel = (first: string, on: string) => { const n = daysBetween(first, on); return n <= 0 ? "new" : n === 1 ? "1 day" : `${n} days`; };
+const isDate = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
+
+/* When a thing is actually needed. An item with no due date is a real category, not a bug. */
+function dueOf(it: Item | undefined) { return isDate(it?.due) ? it.due : null; }
+function dueChip(it: Item, on: string) {
+  const d = dueOf(it);
+  if (!d) return `<span class="due is-none">no date</span>`;
+  const n = daysBetween(on, d);
+  const cls = n < 0 ? "is-over" : n === 0 ? "is-now" : "";
+  const word = n < 0 ? (n === -1 ? "due yesterday" : `${-n} days over`) : n === 0 ? "due today" : n === 1 ? "due tomorrow" : `due ${mmdd(d)}`;
+  return `<span class="due ${cls}">${word}</span>`;
+}
 
 /* ---------- calendar: hints and conflicts only ---------- */
 function hourOn(iso: string, date: string) { const p = partsOf(new Date(iso)); const d = `${p.year}-${p.month}-${p.day}`; return d < date ? 0 : d > date ? 24 : +p.hour + +p.minute / 60; }
+// A block he holds for himself is not time someone else took. Google types it focusTime;
+// the word check catches the ones he made by hand, where he is the only person on it.
+const FOCUS_WORDS = /\b(dnd|do not disturb|do not schedule|ask before scheduling|focus|heads ?down|deep work|hold|block)\b/i;
+function looksLikeFocus(e: CalendarEvent, others: number) {
+  if (e.eventType === "focusTime") return true;
+  if (!e.organizer?.self || others > 0) return false;
+  return FOCUS_WORDS.test(`${e.summary || ""} ${String(e.description || "").replace(/<[^>]*>/g, " ")}`);
+}
 function parseEvents(events: CalendarEvent[], date: string): Ev[] {
   return events.filter((e) => e.status !== "cancelled" && e.start?.dateTime && e.end?.dateTime).map((e) => {
-    const self = (e.attendees || []).find((a) => a.self);
-    return { id: e.id, t: e.summary || "(no title)", s: hourOn(e.start!.dateTime!, date), e: hourOn(e.end!.dateTime!, date), rsvp: self ? self.responseStatus || "needsAction" : "accepted", organizer: !!e.organizer?.self, out: e.eventType === "outOfOffice", emails: (e.attendees || []).map((a) => a.email || "") };
+    const att = e.attendees || [];
+    const self = att.find((a) => a.self);
+    const others = att.filter((a) => !a.self && !a.resource).length;
+    return { id: e.id, t: e.summary || "(no title)", s: hourOn(e.start!.dateTime!, date), e: hourOn(e.end!.dateTime!, date), rsvp: self ? self.responseStatus || "needsAction" : "accepted", organizer: !!e.organizer?.self, out: e.eventType === "outOfOffice", focus: looksLikeFocus(e, others), emails: att.map((a) => a.email || "") };
   }).filter((e) => e.e > e.s && e.rsvp !== "declined").sort((a, b) => a.s - b.s);
 }
 
@@ -85,33 +111,40 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
     selected: "",
     events: null as Ev[] | null,   // today's meetings from the calendar, used only for hints and conflicts
     outs: [] as Ev[],
+    focus: [] as Held[],           // blocks he held for himself, drawn under the meetings that took them
+    folded: { today: false, later: true },   // Later starts shut; the page is for today
     calLoading: true, calError: null as string | null,
     stage: null as { key: string; keepId: string } | null, busy: false, flash: null as { ok: boolean; text: string } | null,
     pendingPrio: {} as Record<string, number>,   // priorities written locally that the server hasn't confirmed yet
   };
   let drag: Drag | null = null, holdUntil = 0, holdTimer: ReturnType<typeof setTimeout> | undefined;
+  try { const v = JSON.parse(localStorage.getItem(FOLD_KEY) || "null"); if (v) state.folded = { ...state.folded, ...v }; } catch {}
+  const saveFold = () => { try { localStorage.setItem(FOLD_KEY, JSON.stringify(state.folded)); } catch {} };
 
   /* ---------- day shape ---------- */
   const WORK_S = 8, WORK_E = 18, STEP = 0.25, MIN_BLOCK = 0.5;
   const hm = (h: number) => { const m = Math.round(h * 60); return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${m % 60 ? " " + (m % 60) + "m" : ""}`; };
-  let bins: Bin[] = [], geom: { W: number; L: number; R: number; X: (h: number) => number; S: number; E: number; d: Shape } | null = null;
+  let bins: Bin[] = [];
 
-  function dayShape(focus: Entry[]): Shape {
-    const meetings = state.events || [], outs = state.outs || [];
+  /** `atHour` is the clock the shape is read at; a past day is read at 24 so nothing is "still to come". */
+  function dayShape(atHour?: number): Shape {
+    const meetings = state.events || [], outs = state.outs || [], held = state.focus || [];
     let S = WORK_S, E = WORK_E;
-    [...meetings, ...outs].forEach((e) => { S = Math.min(S, Math.floor(e.s)); E = Math.max(E, Math.ceil(e.e)); });
+    [...meetings, ...outs, ...held].forEach((e) => { S = Math.min(S, Math.floor(e.s)); E = Math.max(E, Math.ceil(e.e)); });
     E = Math.min(E, 24);
-    const now = nowHourPT();
+    const now = atHour === undefined ? nowHourPT() : atHour;
     bins = [];
     for (let h = S; h < E - 1e-9; h += STEP) {
       const on = meetings.filter((e) => e.s < h + STEP - 1e-6 && e.e > h + 1e-6);
       const out = outs.some((o) => o.s < h + STEP - 1e-6 && o.e > h + 1e-6);
-      bins.push({ h, on, n: on.length, out, work: h >= WORK_S && h < WORK_E });
+      const hold = held.some((f) => f.s < h + STEP - 1e-6 && f.e > h + 1e-6);
+      bins.push({ h, on, n: on.length, out, hold, held: hold && !on.length, work: h >= WORK_S && h < WORK_E });
     }
-    // Open blocks: runs of work-hour quarter hours with no meeting and no time out, at least 30 minutes long.
+    // Open blocks: runs of quarter hours with no meeting and no time out, inside work hours or
+    // inside a block he held for himself, at least 30 minutes long.
     const blocks: Block[] = []; let run: Block | null = null;
     bins.forEach((b) => {
-      const free = b.work && !b.n && !b.out;
+      const free = (b.work || b.hold) && !b.n && !b.out;
       if (free) { if (!run) run = { s: b.h, e: b.h + STEP }; else run.e = b.h + STEP; }
       else if (run) { blocks.push(run); run = null; }
     });
@@ -121,27 +154,51 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
     const meetingH = bins.filter((b) => b.n && b.work).length * STEP;
     const meetingLeft = bins.filter((b) => b.n && b.h >= now).length * STEP;
     const doubleH = bins.filter((b) => b.n >= 2).length * STEP;
-    // Items pinned to a meeting with their person.
-    const pins = new Map<string, { m: Ev; items: Item[] }>();
-    focus.forEach(([, it]) => { const m = meetingFor(it); if (m) { if (!pins.has(m.id)) pins.set(m.id, { m, items: [] }); pins.get(m.id)!.items.push(it); } });
-    return { S, E, now, open, freeLeft, meetingH, meetingLeft, doubleH, pins: [...pins.values()] };
+    const heldLeft = bins.filter((b) => b.hold && !b.n && !b.out && b.h >= now - STEP).length * STEP;
+    const stolen = bins.filter((b) => b.hold && b.n).length * STEP;
+    return { S, E, now, open, freeLeft, meetingH, meetingLeft, doubleH, heldLeft, stolen, held };
   }
 
+  /** The chart is drawn at the width it will occupy, so meeting names get real room. */
+  const chartWidth = () => Math.max(520, Math.min(1240, Math.round(els.main.clientWidth || 680)));
+
   function chartSvg(d: Shape) {
-    const W = 680, L = 30, R = 8, T = 18, B = 118, MX = 3;
-    const X = (h: number) => L + (h - d.S) / (d.E - d.S) * (W - L - R), Y = (v: number) => B - Math.min(v, MX) / MX * (B - T);
-    geom = { W, L, R, X, S: d.S, E: d.E, d };
-    let s = `<rect class="c-over" x="${L}" y="${T}" width="${W - L - R}" height="${Y(1.5) - T}"/><text class="c-gap" x="${W - R - 6}" y="${T + 12}" text-anchor="end">double-booked</text>`;
-    for (let v = 0; v <= MX; v++) for (let h = d.S; h <= d.E + 1e-9; h += 0.5) s += `<circle class="c-grid" cx="${X(h)}" cy="${Y(v)}" r="${h % 1 ? 0.8 : 1.2}"/>`;
-    [1, 2, 3].forEach((v) => (s += `<text x="${L - 9}" y="${Y(v) + 3.5}" text-anchor="end">${v === 3 ? "3+" : v}</text>`));
+    const W = chartWidth(), L = 30, R = 8, T = 18, MX = 3;
+    // Lanes: one per simultaneous meeting, so a stack of three needs three rows of height.
+    const lanes = Math.max(1, Math.min(MX, bins.reduce((mx, b) => Math.max(mx, b.n), 1)));
+    const ROW = 26, B = T + lanes * ROW + 14;
+    const X = (h: number) => L + (h - d.S) / (d.E - d.S) * (W - L - R), Y = (lane: number) => B - 14 - lane * ROW;
+    let s = "";
+    for (let h = Math.ceil(d.S); h <= d.E + 1e-9; h++) s += `<line class="c-grid" x1="${X(h)}" y1="${T}" x2="${X(h)}" y2="${B}"/>`;
+    // Time out sits behind everything, full height.
     (state.outs || []).forEach((o) => {
       const a = Math.max(o.s, d.S), b = Math.min(o.e, d.E);
-      s += `<rect class="c-out" x="${X(a)}" y="${Y(0.6)}" width="${X(b) - X(a)}" height="${B - Y(0.6)}"/>`;
-      if (b - a >= 1) s += `<text x="${(X(a) + X(b)) / 2}" y="${Y(0.6) + 13}" text-anchor="middle">out</text>`;
+      if (b <= a) return;
+      s += `<rect class="c-out" x="${X(a)}" y="${T}" width="${X(b) - X(a)}" height="${B - T}"/>`;
+      if (b - a >= 1) s += `<text x="${(X(a) + X(b)) / 2}" y="${T + 13}" text-anchor="middle">out</text>`;
     });
-    let path = `M${X(d.S)} ${Y(0)}`; bins.forEach((b) => (path += ` H${X(b.h)} V${Y(b.n)} H${X(b.h + STEP)}`));
-    s += `<path class="c-fill" d="${path} V${Y(0)} Z"/><path class="c-line" d="${path} V${Y(0)}"/>`;
-    bins.forEach((b) => { if (b.n >= 2) s += `<line class="c-clash" x1="${X(b.h)}" y1="${Y(b.n)}" x2="${X(b.h + STEP)}" y2="${Y(b.n)}"/>`; });
+    // Blocks he held for himself, drawn under the meetings that were booked over them.
+    (d.held || []).forEach((f, i) => {
+      const a = Math.max(f.s, d.S), b = Math.min(f.e, d.E);
+      if (b <= a) return;
+      const w = X(b) - X(a);
+      s += `<rect class="c-hold" x="${X(a)}" y="${T}" width="${w}" height="${B - T}"/>`;
+      const chars = Math.floor(Math.max(w - 8, 0) / 5.6);
+      if (chars >= 3) s += `<clipPath id="ht${i}"><rect x="${X(a) + 4}" y="${T}" width="${Math.max(w - 8, 0)}" height="${B - T}"/></clipPath><text class="c-ok" x="${X(a) + 4}" y="${B - 4}" clip-path="url(#ht${i})">${esc(f.t)}</text>`;
+    });
+    // Meetings as named blocks, stacked into lanes when they overlap.
+    const taken: Array<{ lane: number; s: number; e: number }> = [];
+    [...(state.events || [])].sort((a, b) => a.s - b.s).forEach((m, i) => {
+      const a = Math.max(m.s, d.S), b = Math.min(m.e, d.E);
+      if (b <= a) return;
+      let lane = 0;
+      while (taken.some((t) => t.lane === lane && t.s < b - 1e-6 && t.e > a + 1e-6)) lane++;
+      taken.push({ lane, s: a, e: b });
+      const w = X(b) - X(a), y = Y(lane + 1), h = Y(lane) - y;
+      s += `<rect class="c-meet ${lane ? "is-clash" : ""}" x="${X(a)}" y="${y}" width="${w}" height="${h}"/>`;
+      const chars = Math.floor(Math.max(w - 8, 0) / 5.6);
+      if (chars >= 3) s += `<clipPath id="mt${i}"><rect x="${X(a) + 4}" y="${y}" width="${Math.max(w - 8, 0)}" height="${h}"/></clipPath><text class="c-ink" x="${X(a) + 4}" y="${y + h / 2 + 4}" clip-path="url(#mt${i})">${esc(m.t)}</text>`;
+    });
     // Open blocks sit on the baseline as a green bar; the part already behind you goes grey.
     d.open.forEach((b) => {
       const past = Math.min(b.e, Math.max(b.s, d.now));
@@ -152,37 +209,10 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
       }
     });
     if (d.now > d.S && d.now < d.E) s += `<rect class="c-past" x="${L}" y="${T}" width="${X(d.now) - L}" height="${B - T}"/><line class="c-now" x1="${X(d.now)}" y1="${T - 8}" x2="${X(d.now)}" y2="${B}"/><text class="c-ink" x="${X(d.now) + 4}" y="${T - 1}">now</text>`;
-    // An item marker rides on top of the meeting where its person is.
-    d.pins.forEach(({ m, items }) => {
-      const top = bins.filter((b) => b.h >= m.s - 1e-6 && b.h < m.e - 1e-6).reduce((mx, b) => Math.max(mx, b.n), 1);
-      const cx = X(m.s) + 7, cy = Y(top) - 9;
-      s += `<circle class="c-item" cx="${cx}" cy="${cy}" r="6.5"/><text class="c-ok" x="${cx}" y="${cy + 3.5}" text-anchor="middle">${items.length}</text>`;
-    });
     s += `<line class="c-axis" x1="${L}" y1="${B}" x2="${W - R}" y2="${B}"/>`;
-    for (let h = d.S; h <= d.E; h++) s += `<text x="${X(h)}" y="${B + 17}" text-anchor="middle">${(h % 12 || 12) + (h >= 12 && h < 24 ? "p" : "a")}</text>`;
-    s += `<line id="cur" y1="${T}" y2="${B}" stroke="#646464" stroke-width=".75" stroke-dasharray="1 2" opacity="0"/>`;
-    return `<svg class="load" id="load" viewBox="0 0 ${W} 140" role="img" aria-label="Meetings per quarter hour today, open time, and items tied to meetings">${s}</svg>`;
-  }
-
-  function attachChart() {
-    const svg = $<SVGSVGElement>("#load"), ro = $("#readout");
-    if (!svg || !ro || !geom) return;
-    const g = geom;
-    const idle = "Hover the day to see what's booked";
-    const at = (ev: PointerEvent) => {
-      const r = svg.getBoundingClientRect();
-      const h = g.S + ((ev.clientX - r.left) / r.width * g.W - g.L) / (g.W - g.L - g.R) * (g.E - g.S);
-      const b = bins[Math.floor((h - g.S) / STEP)]; if (!b) return;
-      const cur = $("#cur")!;
-      cur.setAttribute("x1", String(g.X(b.h + STEP / 2))); cur.setAttribute("x2", String(g.X(b.h + STEP / 2))); cur.setAttribute("opacity", "1");
-      const pinned = g.d.pins.filter((p) => b.h >= p.m.s - 1e-6 && b.h < p.m.e - 1e-6).flatMap((p) => p.items.map((it) => it.title));
-      const what = b.n ? b.on.map((e) => e.t).join("  |  ") : b.out ? "out" : b.work ? "open" : "outside work hours";
-      ro.textContent = `${fmt(b.h)}  ${what}${pinned.length ? "  ·  raise: " + pinned.join("; ") : ""}`;
-      ro.className = "readout" + (b.n >= 2 ? " gap" : "");
-    };
-    svg.addEventListener("pointermove", at);
-    svg.addEventListener("pointerdown", at);
-    svg.addEventListener("pointerleave", () => { $("#cur")?.setAttribute("opacity", "0"); ro.textContent = idle; ro.className = "readout"; });
+    const labelY = B + 17;
+    for (let h = Math.ceil(d.S); h <= d.E; h++) s += `<text x="${X(h)}" y="${labelY}" text-anchor="middle">${(h % 12 || 12) + (h >= 12 && h < 24 ? "p" : "a")}</text>`;
+    return `<svg class="load" id="load" width="${W}" height="${labelY + 5}" viewBox="0 0 ${W} ${labelY + 5}" role="img" aria-label="Today's meetings, the time held for focus, and what is still open">${s}</svg>`;
   }
 
   // Keep a small record of the day's load so earlier days can show it.
@@ -190,7 +220,11 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
   function saveLoad(d: Shape, focusCount: number) {
     if (!state.writable || !state.events) return;
     const today = todayPT();
-    const load = { meetings_h: d.meetingH, double_h: d.doubleH, items_today: focusCount };
+    const trim = (e: { t: string; s: number; e: number }) => ({ t: e.t, s: e.s, e: e.e });
+    const load = {
+      meetings_h: d.meetingH, double_h: d.doubleH, items_today: focusCount,
+      cal: { ev: (state.events || []).map(trim), out: (state.outs || []).map((o) => ({ s: o.s, e: o.e })), held: (state.focus || []).map(trim) },
+    };
     const key = JSON.stringify(load);
     if (key === lastLoad) return;
     lastLoad = key;
@@ -220,8 +254,11 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
     els.days.innerHTML = dates.map((d) => {
       const doc = state.days[d];
       const closed = (doc?.closed || []).length;
+      // A day is sealed once three are closed, which is the whole point of the cap.
+      const full = closed >= CAP;
       const mark = d === today ? "today" : closed ? `${closed} closed` : "";
-      return `<li><button class="day ${d === today ? "is-today" : ""} ${d === state.selected ? "is-on" : ""}" data-day="${d}" aria-current="${d === state.selected ? "date" : "false"}">${dayLabel(d)}<span class="mark">${mark}</span></button></li>`;
+      const seal = `<svg class="seal" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6"/><path d="M4.2 7.2 6.2 9.2 9.8 4.8"/></svg>`;
+      return `<li><button class="day ${d === today ? "is-today" : ""} ${full ? "is-full" : ""} ${d === state.selected ? "is-on" : ""}" data-day="${d}" aria-current="${d === state.selected ? "date" : "false"}" title="${full ? "Closed your three" : `${closed} closed`}">${dayLabel(d)}<span class="mark">${mark}</span>${full ? seal : ""}</button></li>`;
     }).join("");
   }
 
@@ -230,6 +267,7 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
     const mt = mode === "today" || mode === "later" ? meetingFor(it) : null;
     const meta = [
       `<span class="kind">${esc(it.kind || "item")}</span>`,
+      mode === "today" || mode === "later" ? dueChip(it, on) : "",
       it.source ? (it.link ? `<a href="${esc(it.link)}" target="_blank" rel="noopener">${esc(it.source)}</a>` : `<span>${esc(it.source)}</span>`) : (it.link ? `<a href="${esc(it.link)}" target="_blank" rel="noopener">Open</a>` : ""),
       mt ? `<span class="when">${fmt(mt.s)}, ${esc(mt.t)}</span>` : "",
     ].join("");
@@ -281,6 +319,15 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
     const byAge = (a: Entry, b: Entry) => (a[1].first_seen || "").localeCompare(b[1].first_seen || "");
     // Lower priority number is more urgent; unranked items fall to the bottom, oldest first.
     const byPriority = (a: Entry, b: Entry) => (a[1].priority ?? Infinity) - (b[1].priority ?? Infinity) || byAge(a, b);
+    // A date someone actually named beats a rank he set by hand; undated work sorts under it.
+    const byDueThenPriority = (a: Entry, b: Entry) => {
+      const da = dueOf(a[1]), db = dueOf(b[1]);
+      if (da && db) return da.localeCompare(db) || byPriority(a, b);
+      if (da) return -1;
+      if (db) return 1;
+      return byPriority(a, b);
+    };
+    const capRow = (last: string) => `<div class="row is-cap"><span></span><span>open</span><span>item</span><span>${last}</span></div>`;
     let h = `<h1 class="title">${weekday(on)} <span>${mmdd(on)}</span></h1>`;
 
     if (!state.ready) {
@@ -291,7 +338,7 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
     if (isToday) {
       const open = entries.filter(([, it]) => it.status === "open");
       const focus = open.filter(([, it]) => it.horizon === "today").sort(byPriority);
-      const later = open.filter(([, it]) => it.horizon !== "today").sort(byPriority);
+      const later = open.filter(([, it]) => it.horizon !== "today").sort(byDueThenPriority);
       const closed = entries.filter(([, it]) => it.status !== "open" && it.closed_on === today);
       const carried = focus.filter(([, it]) => it.first_seen < today).length;
       const oldest = open.length ? Math.max(...open.map(([, it]) => daysBetween(it.first_seen, today))) : 0;
@@ -301,7 +348,7 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
 
       let shape: Shape | null = null;
       if (state.events) {
-        shape = dayShape(focus);
+        shape = dayShape();
         const todo = focus.length + nConf;
         // Amber when what's left can't hold today's list at 30 minutes an item.
         const tight = todo > 0 && shape.freeLeft < todo * 0.5;
@@ -310,8 +357,10 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
           + `<div class="stat ${tight ? "is-gap" : ""}"><b>${shape.freeLeft ? hm(shape.freeLeft) : "0m"}</b><span>open time left</span></div>`
           + `<div class="stat"><b>${hm(shape.meetingLeft)}</b><span>of meetings to go</span></div>`
           + (shape.doubleH ? `<div class="stat is-gap"><b>${hm(shape.doubleH)}</b><span>double-booked</span></div>` : "")
+          + (shape.heldLeft ? `<div class="stat"><b>${hm(shape.heldLeft)}</b><span>held for focus, still yours</span></div>` : "")
+          + (shape.stolen ? `<div class="stat is-gap"><b>${hm(shape.stolen)}</b><span>booked over your block</span></div>` : "")
           + `</div>`;
-        h += `<div class="chart-wrap">${chartSvg(shape)}</div><div class="readout" id="readout">Hover the day to see what's booked</div>`;
+        h += `<div class="chart-wrap">${chartSvg(shape)}</div>`;
       } else if (state.calLoading && !state.calError) {
         h += `<p class="readout">Loading today's meetings…</p>`;
       }
@@ -319,19 +368,31 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
       if (state.flash) h += `<div class="banner ${state.flash.ok ? "ok" : ""}">${esc(state.flash.text)}</div>`;
       if (state.calError) h += `<div class="banner">${esc(state.calError)}</div>`;
 
-      h += `<div class="sect">Today <span class="n">${focus.length + nConf}</span></div><div class="rows" data-list="today">`;
-      h += conflictRows();
-      h += focus.length ? focus.map(([id, it]) => itemRow(id, it, today, "today")).join("") : (nConf ? "" : `<div class="empty">Nothing picked for today. Pull something up from later.</div>`);
-      h += `</div>`;
+      const shutT = state.folded.today, over = focus.length > CAP;
+      h += `<div class="sect is-head ${shutT ? "is-shut" : ""}" data-fold="today">Today <span class="n">${focus.length + nConf}</span>${over ? `<span class="n gap">over three</span>` : ""}${closed.length ? `<span class="n ok">${closed.length} done</span>` : ""}</div>`;
+      if (shutT) {
+        h += `<div class="folded"><b>${focus.length + nConf}</b> open${closed.length ? `, <b>${closed.length}</b> closed` : ""}${over ? `<span class="is-gap">over three</span>` : ""}</div>`;
+      } else {
+        h += `<div class="rows" data-list="today">`;
+        h += conflictRows();
+        h += focus.length ? focus.map(([id, it]) => itemRow(id, it, today, "today")).join("") : (nConf ? "" : `<div class="empty">Nothing picked for today. Pull something up from later.</div>`);
+        // Closed work stays in today's list rather than moving to a section of its own.
+        h += closed.map(([id, it]) => itemRow(id, it, today, "closed")).join("");
+        h += `</div>`;
+      }
 
-      if (closed.length) h += `<div class="sect">Closed today <span class="n">${closed.length}</span></div><div class="rows">${closed.map(([id, it]) => itemRow(id, it, today, "closed")).join("")}</div>`;
-
-      h += `<div class="sect">Later <span class="n">${later.length}</span></div>`;
-      h += `<p class="note">Still open, not for today, most urgent first. Drag the handle to reorder. The morning run carries everything here forward, keeps your order, and closes what you finish in Google Tasks.</p><div class="rows" data-list="later">`;
-      h += later.length ? later.map(([id, it]) => itemRow(id, it, today, "later")).join("") : `<div class="empty">Nothing waiting.</div>`;
-      h += `</div>`;
+      const dueSoon = later.filter(([, it]) => dueOf(it));
+      const overdue = dueSoon.filter(([, it]) => daysBetween(today, dueOf(it)!) < 0).length;
+      const shutL = state.folded.later;
+      h += `<div class="sect is-head ${shutL ? "is-shut" : ""}" data-fold="later">Later <span class="n">${later.length}</span>${dueSoon.length ? `<span class="n ${overdue ? "gap" : ""}">${dueSoon.length} dated</span>` : ""}</div>`;
+      if (shutL) {
+        h += `<div class="folded"><b>${later.length}</b> waiting${overdue ? `<span class="is-gap"><b>${overdue}</b> overdue</span>` : ""}</div>`;
+      } else {
+        h += `<p class="note">Still open, not for today, soonest due first. Drag the handle to reorder. The morning run carries everything here forward, keeps your order, and closes what you finish in Google Tasks.</p><div class="rows" data-list="later">`;
+        h += later.length ? later.map(([id, it]) => itemRow(id, it, today, "later")).join("") : `<div class="empty">Nothing waiting.</div>`;
+        h += `</div>`;
+      }
       els.main.innerHTML = h;
-      attachChart();
       if (shape) saveLoad(shape, focus.length + nConf);
       return;
     } else {
@@ -342,11 +403,20 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
       const carriedOut = focusIds.filter((id) => !closedIds.includes(id)).length;
       const ld = doc?.load;
       h += `<p class="sub">${focusIds.length} on the list · ${closedIds.length} closed · ${carriedOut} carried to the next day${ld ? ` · ${hm(ld.meetings_h)} in meetings${ld.double_h ? ` · <span class="gap">${hm(ld.double_h)} double-booked</span>` : ""}` : ""}</p>`;
-      h += `<div class="sect">On the list <span class="n">${focusIds.length}</span></div><div class="rows">`;
-      h += focusIds.length ? focusIds.map((id) => itemRow(id, state.items[id], on, "past")).join("") : `<div class="empty">No list was saved for this day.</div>`;
+      // Redraw the shape that day actually had, from what the page saved then.
+      if (ld?.cal?.ev) {
+        const keep = { events: state.events, outs: state.outs, focus: state.focus };
+        state.events = ld.cal.ev.map((e, i) => ({ ...e, id: `p${i}`, rsvp: "accepted", organizer: false, out: false, focus: false, emails: [] }));
+        state.outs = (ld.cal.out || []).map((o, i) => ({ id: `po${i}`, t: "out", s: o.s, e: o.e, rsvp: "accepted", organizer: false, out: true, focus: false, emails: [] }));
+        state.focus = ld.cal.held || [];
+        try { h += `<div class="chart-wrap">${chartSvg(dayShape(24))}</div>`; } catch {}
+        state.events = keep.events; state.outs = keep.outs; state.focus = keep.focus;
+      }
+      // One list, so a thing that closed that day without being picked still shows where it sat.
+      const allIds = Array.from(new Set([...focusIds, ...closedIds]));
+      h += `<div class="sect">On the list <span class="n">${allIds.length}</span></div><div class="rows">`;
+      h += allIds.length ? capRow("outcome") + allIds.map((id) => itemRow(id, state.items[id], on, "past")).join("") : `<div class="empty">No list was saved for this day.</div>`;
       h += `</div>`;
-      const offList = closedIds.filter((id) => !focusIds.includes(id));
-      if (offList.length) h += `<div class="sect">Also closed <span class="n">${offList.length}</span></div><div class="rows">${offList.map((id) => itemRow(id, state.items[id], on, "past")).join("")}</div>`;
       if (addedIds.length) h += `<div class="sect">New that day <span class="n">${addedIds.length}</span></div><div class="rows">${addedIds.map((id) => itemRow(id, state.items[id], on, "past")).join("")}</div>`;
     }
     els.main.innerHTML = h;
@@ -406,7 +476,13 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
   async function loadCalendar() {
     const date = todayPT();
     const r = await settle(calendarAction(date));
-    if (r.ok) { const all = parseEvents(r.data.events, date); state.events = all.filter((e) => !e.out); state.outs = all.filter((e) => e.out); state.calError = null; }
+    if (r.ok) {
+      const all = parseEvents(r.data.events, date);
+      state.events = all.filter((e) => !e.out && !e.focus);
+      state.outs = all.filter((e) => e.out);
+      state.focus = all.filter((e) => e.focus && !e.out).map((e) => ({ t: e.t, s: e.s, e: e.e }));
+      state.calError = null;
+    }
     else if (r.code === "reauth" || r.code === "not_connected") { state.events = null; state.calError = calendarMessage(r.code); }
     else state.calError = state.events ? null : calendarMessage(r.code);
     state.calLoading = false;
@@ -446,6 +522,8 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
     const target = ev.target as Element;
     const day = target.closest<HTMLElement>("[data-day]");
     if (day) { state.selected = day.dataset.day!; state.stage = null; state.flash = null; try { history.replaceState(history.state, "", "#" + state.selected); } catch {} render(); return; }
+    const fold = target.closest<HTMLElement>("[data-fold]");
+    if (fold) { const k = fold.dataset.fold as "today" | "later"; state.folded[k] = !state.folded[k]; saveFold(); renderMain(); return; }
     const a = target.closest<HTMLButtonElement>("[data-act]");
     if (a && !a.disabled) { act(a.dataset.act!, a.dataset.id!); return; }
     const k = target.closest<HTMLButtonElement>("[data-keep]");
@@ -591,6 +669,14 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
   window.addEventListener("pointercancel", endDrag);
   const onFocus = () => { refresh(); loadCalendar(); };
   window.addEventListener("focus", onFocus);
+  // The chart is sized in pixels, so a width change has to redraw it.
+  let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+  let lastWidth = chartWidth();
+  const onResize = () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { if (chartWidth() !== lastWidth) { lastWidth = chartWidth(); renderMain(); } }, 150);
+  };
+  window.addEventListener("resize", onResize);
   const timer = setInterval(() => { refresh(); loadCalendar(); }, REFRESH_MS);
 
   return () => {
@@ -603,6 +689,8 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
     window.removeEventListener("pointerup", endDrag);
     window.removeEventListener("pointercancel", endDrag);
     window.removeEventListener("focus", onFocus);
+    window.removeEventListener("resize", onResize);
+    clearTimeout(resizeTimer);
     root.classList.remove("is-dragging");
   };
 }

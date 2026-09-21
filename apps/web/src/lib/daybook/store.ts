@@ -2,10 +2,12 @@ import {
   createDb,
   daybookDays,
   daybookItems,
+  daybookTriggers,
   type DaybookDay,
   type DaybookItem,
+  type DaybookTrigger,
 } from "@awd/db";
-import { and, asc, eq, gte, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
 
 /**
  * The Daybook's reads and writes, shared by the page and the MCP tools.
@@ -45,6 +47,8 @@ export interface Item {
   horizon: Horizon;
   priority: number | null;
   ranked_by_hand: string | null;
+  /** When it is owed. Null for most of the list, which is not a deadline of zero. */
+  due: string | null;
   person: string | null;
   link: string | null;
   source: string | null;
@@ -53,12 +57,45 @@ export interface Item {
   updated_at: string;
 }
 
+/**
+ * One thing that pointed at an item: a flagged mail, an invite, a saved Slack
+ * message, a task, a chat session, a notebook line.
+ */
+export interface Trigger {
+  id: string;
+  item_id: string;
+  surface: string;
+  account: string;
+  external_id: string;
+  link: string | null;
+  title: string | null;
+  seen_at: string;
+}
+
+export interface TriggerInput {
+  surface: string;
+  external_id: string;
+  account?: string | null;
+  link?: string | null;
+  title?: string | null;
+}
+
 export interface Day {
   date: string;
   focus: string[];
   added: string[];
   closed: string[];
-  load: { meetings_h: number; double_h: number; items_today: number } | null;
+  /** `cal` is the day's drawn shape, kept so an earlier date redraws itself rather than today. */
+  load: {
+    meetings_h: number;
+    double_h: number;
+    items_today: number;
+    cal?: {
+      ev: Array<{ t: string; s: number; e: number }>;
+      out: Array<{ s: number; e: number }>;
+      held: Array<{ t: string; s: number; e: number }>;
+    };
+  } | null;
   updated_at: string;
 }
 
@@ -91,6 +128,7 @@ const toItem = (r: DaybookItem): Item => ({
   horizon: r.horizon as Horizon,
   priority: r.priority,
   ranked_by_hand: r.rankedByHand,
+  due: r.due,
   person: r.person,
   link: r.link,
   source: r.source,
@@ -108,6 +146,17 @@ const toDay = (r: DaybookDay): Day => ({
   updated_at: r.updatedAt,
 });
 
+const toTrigger = (r: DaybookTrigger): Trigger => ({
+  id: r.id,
+  item_id: r.itemId,
+  surface: r.surface,
+  account: r.account,
+  external_id: r.externalId,
+  link: r.link,
+  title: r.title,
+  seen_at: r.seenAt.toISOString(),
+});
+
 const byPriority = [sql`${daybookItems.priority} asc nulls last`, asc(daybookItems.firstSeen)];
 
 /* ---------- reads ---------- */
@@ -122,6 +171,79 @@ export async function listItems(options: { closedSince?: string; all?: boolean }
       : eq(daybookItems.status, "open");
   const rows = await db.select().from(daybookItems).where(where).orderBy(...byPriority);
   return rows.map(toItem);
+}
+
+/**
+ * Every trigger on the given items, newest first, grouped by item.
+ *
+ * The morning run reads this alongside the list so it can ask "have I already
+ * seen this message" from data rather than from judgment.
+ */
+export async function triggersFor(itemIds: string[]): Promise<Record<string, Trigger[]>> {
+  if (!itemIds.length) return {};
+  const rows = await getDb()
+    .select()
+    .from(daybookTriggers)
+    .where(inArray(daybookTriggers.itemId, itemIds))
+    .orderBy(desc(daybookTriggers.seenAt));
+  const out: Record<string, Trigger[]> = {};
+  for (const row of rows) (out[row.itemId] ??= []).push(toTrigger(row));
+  return out;
+}
+
+/**
+ * The item a surface object already points at, if any.
+ *
+ * This is the duplicate guard that costs nothing: one Gmail message, one
+ * calendar event or one task id resolves to at most one item, whatever a run
+ * decides about it later.
+ */
+export async function findTrigger(
+  surface: string,
+  externalId: string,
+  account = "",
+): Promise<{ trigger: Trigger; item: Item } | null> {
+  const [row] = await getDb()
+    .select({ trigger: daybookTriggers, item: daybookItems })
+    .from(daybookTriggers)
+    .innerJoin(daybookItems, eq(daybookItems.id, daybookTriggers.itemId))
+    .where(
+      and(
+        eq(daybookTriggers.surface, surface),
+        eq(daybookTriggers.account, account),
+        eq(daybookTriggers.externalId, externalId),
+      ),
+    );
+  return row ? { trigger: toTrigger(row.trigger), item: toItem(row.item) } : null;
+}
+
+/**
+ * Point a surface object at an item.
+ *
+ * Attaching twice re-parents rather than duplicating, because the same message
+ * turning out to belong to a different item is an ordinary correction.
+ */
+export async function attachTrigger(itemId: string, input: TriggerInput): Promise<Trigger> {
+  const surface = String(input.surface ?? "").trim();
+  const externalId = String(input.external_id ?? "").trim();
+  if (!surface) throw new Error("trigger needs a surface");
+  if (!externalId) throw new Error("trigger needs an external_id");
+  const [row] = await getDb()
+    .insert(daybookTriggers)
+    .values({
+      itemId,
+      surface,
+      account: input.account ?? "",
+      externalId,
+      link: input.link ?? null,
+      title: input.title ?? null,
+    })
+    .onConflictDoUpdate({
+      target: [daybookTriggers.surface, daybookTriggers.account, daybookTriggers.externalId],
+      set: { itemId, link: input.link ?? null, title: input.title ?? null, seenAt: sql`now()` },
+    })
+    .returning();
+  return toTrigger(row);
 }
 
 export async function listDays(): Promise<Day[]> {
@@ -156,6 +278,7 @@ const EDITABLE = [
   "horizon",
   "priority",
   "ranked_by_hand",
+  "due",
   "person",
   "link",
   "source",
@@ -200,6 +323,9 @@ function columnsOf(input: Partial<Pick<Item, Editable>>) {
         break;
       case "ranked_by_hand":
         out.rankedByHand = nullableDate(v, key);
+        break;
+      case "due":
+        out.due = nullableDate(v, key);
         break;
       case "first_seen":
         out.firstSeen = assertDate(v, key);

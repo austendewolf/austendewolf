@@ -1,12 +1,16 @@
 import {
   assertDate,
+  attachTrigger,
   closeItem,
+  findTrigger,
   getDay,
   listItems,
   setDay,
   todayPT,
+  triggersFor,
   upsertItems,
   type ItemInput,
+  type TriggerInput,
 } from "@/lib/daybook/store";
 import type { ToolDefinition } from "./google";
 
@@ -29,6 +33,17 @@ function requireWrites(tool: string): void {
 const date = { type: "string", description: "YYYY-MM-DD, Pacific" };
 const ids = { type: "array", items: { type: "string" } };
 
+const triggerProperties = {
+  surface: { type: "string", description: "mail, calendar, slack, tasks, chat, notebook" },
+  external_id: {
+    type: "string",
+    description: "The id on that surface: a Gmail message id, an event id, a task id, a Slack ts.",
+  },
+  account: { type: "string", description: "work or personal, where the surface has accounts" },
+  link: { type: ["string", "null"] },
+  title: { type: ["string", "null"], description: "What the trigger itself said, before rewriting" },
+};
+
 const itemProperties = {
   id: { type: "string", description: "Stable key, e.g. action:austen:<slug>" },
   updated_at: {
@@ -41,11 +56,26 @@ const itemProperties = {
   horizon: { type: "string", enum: ["today", "later"] },
   priority: { type: ["integer", "null"], description: "Lower is more urgent. Steps of 10." },
   ranked_by_hand: { type: ["string", "null"], description: "Date he last dragged it. Do not change hand-ranked order." },
+  due: {
+    type: ["string", "null"],
+    description: "YYYY-MM-DD, when it is owed. Leave it null unless someone actually named a date.",
+  },
   person: { type: ["string", "null"], description: "Email, matched against meeting attendees" },
   link: { type: ["string", "null"] },
   source: { type: ["string", "null"] },
   first_seen: date,
   closed_on: { type: ["string", "null"] },
+  triggers: {
+    type: "array",
+    description:
+      "What pointed at this item. Attach one instead of writing a second item when a flagged mail, " +
+      "an invite, a saved Slack message or a task turns out to be a thing already on the list.",
+    items: {
+      type: "object",
+      properties: triggerProperties,
+      required: ["surface", "external_id"],
+    },
+  },
 };
 
 export const DAYBOOK_TOOLS: ToolDefinition[] = [
@@ -54,23 +84,36 @@ export const DAYBOOK_TOOLS: ToolDefinition[] = [
     description:
       "Read the Daybook. With no date, returns open items, most urgent first; closed_since adds items " +
       "closed or dropped on or after that date, and all returns every item. With a date, returns that " +
-      "day's focus, added and closed lists plus every item they name or that closed that day.",
+      "day's focus, added and closed lists plus every item they name or that closed that day. Each " +
+      "answer also carries the triggers on those items, so read this before adding anything.",
     inputSchema: {
       type: "object",
       properties: {
         date,
         closed_since: date,
         all: { type: "boolean", default: false },
+        triggers: {
+          type: "boolean",
+          default: true,
+          description: "Include what pointed at each item, keyed by item id. Match against these before adding.",
+        },
       },
     },
     run: async (a) => {
-      if (a.date !== undefined) return getDay(assertDate(a.date));
+      const withTriggers = a.triggers !== false;
+      if (a.date !== undefined) {
+        const day = await getDay(assertDate(a.date));
+        if (!withTriggers) return day;
+        return { ...day, triggers: await triggersFor(day.items.map((i) => i.id)) };
+      }
+      const items = await listItems({
+        closedSince: a.closed_since === undefined ? undefined : assertDate(a.closed_since, "closed_since"),
+        all: Boolean(a.all),
+      });
       return {
         today: todayPT(),
-        items: await listItems({
-          closedSince: a.closed_since === undefined ? undefined : assertDate(a.closed_since, "closed_since"),
-          all: Boolean(a.all),
-        }),
+        items,
+        ...(withTriggers ? { triggers: await triggersFor(items.map((i) => i.id)) } : {}),
       };
     },
   },
@@ -94,8 +137,30 @@ export const DAYBOOK_TOOLS: ToolDefinition[] = [
     run: async (a) => {
       requireWrites("daybook_upsert");
       if (!Array.isArray(a.items)) throw new Error("items must be an array");
-      return { items: await upsertItems(a.items as ItemInput[]) };
+      const inputs = a.items as Array<ItemInput & { triggers?: TriggerInput[] }>;
+      const items = await upsertItems(inputs);
+      const attached = [];
+      for (const input of inputs) {
+        for (const t of input.triggers ?? []) attached.push(await attachTrigger(input.id, t));
+      }
+      return { items, ...(attached.length ? { triggers: attached } : {}) };
     },
+  },
+  {
+    name: "daybook_find_trigger",
+    description:
+      "Ask whether one thing on a surface is already on the list: a mail message, a calendar event, " +
+      "a Slack message, a task. Returns the item it points at, or nothing. Cheaper and more reliable " +
+      "than judging, so call it first and spend judgment only on what comes back empty.",
+    inputSchema: {
+      type: "object",
+      properties: triggerProperties,
+      required: ["surface", "external_id"],
+    },
+    run: async (a) =>
+      (await findTrigger(String(a.surface), String(a.external_id), a.account === undefined ? "" : String(a.account))) ?? {
+        found: false,
+      },
   },
   {
     name: "daybook_close",
