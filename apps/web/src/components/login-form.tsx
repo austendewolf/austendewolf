@@ -142,6 +142,14 @@ export function LoginForm({ next = "/" }: { next?: string }) {
         </Button>
       )}
 
+      {/* The address and its button are one thing. The rule marks where that
+          ends and the routes that do not use it begin. */}
+      <div className="flex items-center gap-3 py-1 text-xs text-muted-foreground">
+        <span className="h-px flex-1 bg-border/50" />
+        or
+        <span className="h-px flex-1 bg-border/50" />
+      </div>
+
       {passkeys && !withPassword && (
         <Button type="button" variant="outline" onClick={usePasskey} disabled={busy} className={ROUTE}>
           <Icon d={TOUCH} />
