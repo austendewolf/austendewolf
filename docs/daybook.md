@@ -38,6 +38,8 @@ The list lives in one store. The `daybook` schema is live on the site's database
 
 **Google Tasks** reaches the gateway as `tasks_list`, `tasks_list_tasklists` and `tasks_complete`, on the `tasks` scope. Tasks exposes no created date, so an undated task is dated from the dated heading above it in the source Doc, which the task's `links` array names. This replaced a Chrome scrape that could not run in a scheduled session at all.
 
+**Mail** is a capture surface on both accounts, decided 09/21/2026. Austen keeps no label and does not star, so nothing in Gmail marks a message as his to do and no marker-based route was available. The morning run reads the unread inbox it already reads, decides which messages are really things he owes someone, and offers each one as an item in the same confirmation block as its proposed actions. Only a yes writes it. An offer has to clear three bars first: the thing needs him rather than anyone else, it is still undone when checked against the underlying object rather than the unread flag, and it is not already on the list. Items carry the account and the message permalink, so the row opens the thread it came from.
+
 **Slack Later** is still unbuilt, and it is the only capture surface left. Reminders work on the public API through `reminders.list`. Saved items do not: `stars.list` was deprecated for this and returns nothing saved through Later, and no public Later API exists. The only route is `saved.list`, the internal web client endpoint, which Austen chose on 09/21/2026 knowing it is unsupported.
 
 Its contract, confirmed from rusq/slackdump PR 738: form-encoded POST to the workspace host's `/api/saved.list`, authenticated by an `xoxc-` web client token plus the `d` cookie, both of which come from a signed-in browser and both of which expire on their own schedule. Params are `token`, `limit`, `filter`, `include_tombstones=true` and `cursor`; `filter` accepts exactly `saved`, `completed` or `archived`, and both `all` and the empty string are rejected. The caller pages through `response_metadata.next_cursor` until it comes back empty. Each item gives a channel id and a timestamp but never the message text, so resolve it through `conversations.history` with `latest` and `oldest` set to that timestamp and `inclusive=true`, which works on a normal user token.
@@ -62,7 +64,7 @@ The morning skill writes through these instead of the artifact database, and any
 2. **Done 09/21.** The four gateway tools plus `calendar_respond`, and Google Tasks alongside them.
 3. **Done 09/21.** The `/daybook` page, ported from the artifact, with both themes.
 4. **Done 09/21.** The morning skill and the scheduled task write through the tools. The artifact goes read-only for a week, then gets deleted.
-5. Slack Later and reminders as a capture surface.
+5. Slack Later and reminders as a capture surface. Mail already landed with phase 4.
 6. Process notebook scans in the morning run.
 7. Process scans on the server with the site's own Anthropic key.
 
