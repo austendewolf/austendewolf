@@ -22,3 +22,6 @@ out/
 dist/
 .turbo/
 *.tsbuildinfo
+
+# Local copy of the artifact, kept off a public repo.
+docs/daybook-artifact.html
