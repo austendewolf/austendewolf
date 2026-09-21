@@ -31,6 +31,13 @@ export function Daybook({
       <div className="shell">
         <nav className="rail" aria-label="Days">
           <ul className="days" ref={days} />
+          {/* Pushes the rail off to the left, leaving each day as a date. */}
+          <button className="rail-t" data-rail="" type="button" aria-label="Collapse or expand the day list">
+            <svg viewBox="0 0 12 12" aria-hidden="true">
+              <path d="M7.5 2.5 4 6l3.5 3.5" />
+              <path d="M10.5 1.5v9" />
+            </svg>
+          </button>
         </nav>
         {/* Not a <main>: the site layout already has one around this page. */}
         <div ref={main} aria-live="polite" />

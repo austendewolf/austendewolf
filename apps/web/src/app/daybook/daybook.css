@@ -110,7 +110,24 @@
 .daybook .day:hover { border-color: var(--na); color: var(--ink); }
 .daybook .day.is-on { border-color: var(--na); color: var(--strong); }
 .daybook .day.is-today { border-color: var(--green-shade); color: var(--green-shade); }
+.daybook .day .wd { flex: none; }
+.daybook .day .dd { flex: none; }
 .daybook .day .mark { font-size: 10.5px; color: var(--na); overflow: hidden; text-overflow: ellipsis; }
+
+/* The collapse control sits under the last day, at the foot of the rail. */
+.daybook .rail-t { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin-top: 10px; padding: 0; background: none; border: 1px solid var(--edge); border-radius: 999px; cursor: pointer; color: var(--na); }
+.daybook .rail-t:hover { border-color: var(--na); color: var(--ink); }
+.daybook .rail-t svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.daybook.is-narrow .rail-t svg { transform: scaleX(-1); }
+
+/*
+ * Collapsed, the rail keeps only the right half of each pill. The left edge
+ * squares off and runs past the column, so a day reads as a tab that carried
+ * on off the page rather than as a shrunken button.
+ */
+.daybook.is-narrow .shell { grid-template-columns: 58px minmax(0, 1fr); gap: 20px; }
+.daybook.is-narrow .day { justify-content: flex-end; gap: 6px; margin-left: -14px; padding-left: 14px; border-left-color: transparent; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.daybook.is-narrow .day .wd, .daybook.is-narrow .day .mark { display: none; }
 /* Every day carries the same slot: an open ring until the three are closed, then a check. */
 .daybook .day.is-full { border-color: var(--green-shade); color: var(--green-shade); }
 .daybook .seal { flex: none; width: 14px; height: 14px; }
@@ -219,6 +236,11 @@
   .daybook .rail { position: static; }
   .daybook .days { flex-direction: row; overflow-x: auto; padding-bottom: 4px; }
   .daybook .day { width: auto; white-space: nowrap; }
+  /* The rail already lies flat on a phone, so collapsing it has nothing to do. */
+  .daybook.is-narrow .shell { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .daybook.is-narrow .day { margin-left: 0; padding-left: 10px; border-left-color: var(--edge); border-radius: 999px; }
+  .daybook.is-narrow .day .wd { display: inline; }
+  .daybook .rail-t { display: none; }
   .daybook .row { grid-template-columns: 16px 48px minmax(0, 1fr); }
   .daybook .row > .pills { grid-column: 3; justify-content: flex-start; margin-top: 6px; }
 }

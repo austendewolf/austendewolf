@@ -39,6 +39,7 @@ const REFRESH_MS = 60_000;
 /** Three is the day's list. Closing three seals the day in the rail. */
 const CAP = 3;
 const FOLD_KEY = "daybook.folded";
+const RAIL_KEY = "daybook.rail";
 
 /* ---------- dates, all Pacific ---------- */
 const partsOf = (d: Date) => Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(d).map((p) => [p.type, p.value]));
@@ -120,6 +121,17 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
   let drag: Drag | null = null, holdUntil = 0, holdTimer: ReturnType<typeof setTimeout> | undefined;
   try { const v = JSON.parse(localStorage.getItem(FOLD_KEY) || "null"); if (v) state.folded = { ...state.folded, ...v }; } catch {}
   const saveFold = () => { try { localStorage.setItem(FOLD_KEY, JSON.stringify(state.folded)); } catch {} };
+
+  /*
+   * The rail can be pushed off to the left, leaving each day as the right half
+   * of its own pill: the date, the seal, and a squared-off edge where the
+   * weekday used to be. The chart reads the main column's width when it draws,
+   * so a collapse has to redraw it.
+   */
+  let railShut = false;
+  try { railShut = localStorage.getItem(RAIL_KEY) === "shut"; } catch {}
+  const applyRail = () => root.classList.toggle("is-narrow", railShut);
+  applyRail();
 
   /* ---------- day shape ---------- */
   const WORK_S = 8, WORK_E = 18, STEP = 0.25, MIN_BLOCK = 0.5;
@@ -258,7 +270,7 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
       const full = closed >= CAP;
       const mark = d === today ? "today" : closed ? `${closed} closed` : "";
       const seal = `<svg class="seal" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6"/><path d="M4.2 7.2 6.2 9.2 9.8 4.8"/></svg>`;
-      return `<li><button class="day ${d === today ? "is-today" : ""} ${full ? "is-full" : ""} ${d === state.selected ? "is-on" : ""}" data-day="${d}" aria-current="${d === state.selected ? "date" : "false"}" title="${full ? "Closed your three" : `${closed} closed`}">${dayLabel(d)}<span class="mark">${mark}</span>${full ? seal : ""}</button></li>`;
+      return `<li><button class="day ${d === today ? "is-today" : ""} ${full ? "is-full" : ""} ${d === state.selected ? "is-on" : ""}" data-day="${d}" aria-current="${d === state.selected ? "date" : "false"}" title="${dayLabel(d)}, ${full ? "closed your three" : `${closed} closed`}"><span class="wd">${weekday(d).slice(0, 3)}</span><span class="dd">${mmdd(d)}</span><span class="mark">${mark}</span>${full ? seal : ""}</button></li>`;
     }).join("");
   }
 
@@ -522,6 +534,13 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
     const target = ev.target as Element;
     const day = target.closest<HTMLElement>("[data-day]");
     if (day) { state.selected = day.dataset.day!; state.stage = null; state.flash = null; try { history.replaceState(history.state, "", "#" + state.selected); } catch {} render(); return; }
+    if (target.closest("[data-rail]")) {
+      railShut = !railShut;
+      try { localStorage.setItem(RAIL_KEY, railShut ? "shut" : "open"); } catch {}
+      applyRail();
+      renderMain();
+      return;
+    }
     const fold = target.closest<HTMLElement>("[data-fold]");
     if (fold) { const k = fold.dataset.fold as "today" | "later"; state.folded[k] = !state.folded[k]; saveFold(); renderMain(); return; }
     const a = target.closest<HTMLButtonElement>("[data-act]");

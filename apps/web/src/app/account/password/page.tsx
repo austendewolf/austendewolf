@@ -1,3 +1,4 @@
+import { PasskeyManager } from "@/components/passkey-manager";
 import { PasswordForm } from "@/components/password-form";
 import { getViewer } from "@/lib/mcp/owner";
 
@@ -31,7 +32,17 @@ export default async function PasswordPage() {
       <p className="mt-2 text-sm text-muted-foreground">{viewer.email}</p>
 
       <div className="mt-8">
-        <PasswordForm />
+        <PasskeyManager />
+      </div>
+
+      <div className="mt-12 border-t pt-8">
+        <h2 className="text-sm font-medium">Password</h2>
+        <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+          The fallback for a device that has no passkey on it.
+        </p>
+        <div className="mt-4">
+          <PasswordForm />
+        </div>
       </div>
     </div>
   );
