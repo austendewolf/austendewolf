@@ -1,35 +1,70 @@
 /*
- * The Daybook, carried over from the artifact as it was.
+ * The Daybook, carried over from the artifact.
  *
- * Hover light, from ~/.claude/skills/morning/hover-light.css (org-matrix light
- * theme). Deliberately single-theme: every colour is painted explicitly so it
- * holds on the site's dark paper. Green means accounted for, amber means a gap,
- * and there is no red.
+ * Both themes, ported from the hover-ped matrix theme in
+ * ~/Git/org-matrix/src/styles.css. The two already agreed on their base colour,
+ * so this is a mapping and not a redesign: the green below is that theme's
+ * SEED_COLOR and the amber is the seed's triadic secondary. Green means
+ * accounted for, amber means a gap, and there is no red.
  *
- * Every selector sits under `.daybook`, because a stylesheet a page imports
- * stays loaded after client navigation away from it. The rules are unlayered,
- * so they win over Tailwind's base layer without needing specificity. What the
- * artifact set on :root, html and body is set on `.daybook`, which covers the
- * viewport above the site's sheet and scrolls on its own.
+ * This page owns its own look. The landing page is a blueprint and the workout
+ * app is its own thing; only authentication and the domain are shared, which is
+ * what every selector sitting under `.daybook` enforces. A stylesheet a page
+ * imports stays loaded after client navigation away from it, and the rules are
+ * unlayered so they win over Tailwind's base layer without needing specificity.
+ * What the artifact set on :root, html and body is set on `.daybook`, which
+ * covers the viewport above the site's sheet and scrolls on its own.
+ *
+ * Theme selection follows org-matrix: `color-scheme` chooses, and every colour
+ * is one light-dark() pair declared once. The site around this page is
+ * dark-only, so the scheme is set here rather than on :root, and this is the
+ * one surface that follows the operating system. `data-theme` on the same
+ * element overrides that.
  */
+.daybook { color-scheme: light dark; }
+.daybook[data-theme='light'] { color-scheme: light; }
+.daybook[data-theme='dark'] { color-scheme: dark; }
+
 .daybook {
-  --green: #30cf8c;
-  --green-shade: #27a570;
-  --amber: #cf8c30;
-  --bg: #fbfbfb;
-  --edge: #e0e0e0;
-  --rule: #c8c8c8;
-  --ink: #1a1a1a;
-  --strong: #000000;
-  --muted: #646464;
-  --na: #9c9c9c;
-  --gap: color-mix(in srgb, var(--amber) 80%, #000000);
+  /* The six properties org-matrix derives from its seed at boot, written out
+     because the seed does not change. Nothing below names a colour any other
+     way, apart from the two knockouts and the drag shadow. */
+  --monochromatic-primary: #30cf8c;
+  --monochromatic-secondary: #27a570;
+  --monochromatic-tertiary: #5ad8a3;
+  --triadic-primary: #30cf8c;
+  --triadic-secondary: #cf8c30;
+  --triadic-tertiary: #8c30cf;
+
+  /* Each accent steps up one stop in dark, which is the whole reason a hue
+     still needs a pair: the shade carries light, the tint carries dark. */
+  --green: light-dark(var(--monochromatic-primary), var(--monochromatic-tertiary));
+  --green-shade: light-dark(var(--monochromatic-secondary), var(--monochromatic-primary));
+  --amber: var(--triadic-secondary);
+
+  --bg: light-dark(#fbfbfb, #101010);
+  /* Borders are alpha rather than solid, so one token stops reading as three
+     weights once it sits over a tinted fill. */
+  --edge: light-dark(rgba(0, 0, 0, 0.11), rgba(255, 255, 255, 0.09));
+  --rule: light-dark(rgba(0, 0, 0, 0.18), rgba(255, 255, 255, 0.15));
+  --ink: light-dark(#1c1c1c, #f8f8f8);
+  --strong: light-dark(#000000, #ffffff);
+  --muted: light-dark(#646464, #8f8f8f);
+  --na: light-dark(#9c9c9c, #666666);
+  /* Amber toward black on paper and toward white on ink, so a gap reads at the
+     same strength either way. */
+  --gap: light-dark(
+    color-mix(in srgb, var(--amber) 80%, #000000),
+    color-mix(in srgb, var(--amber) 78%, #ffffff)
+  );
   --gap-soft: color-mix(in srgb, var(--amber) 12%, var(--bg));
   --hit-bg: color-mix(in srgb, var(--green-shade) 14%, var(--bg));
+  /* Text on a green fill. Both stops of the green are light enough that this
+     stays dark in either theme. */
   --knock: #0d0d0d;
+  --lift: light-dark(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.6));
   --sans: var(--font-geist-sans), 'Geist', 'Hover Diatype', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --mono: var(--font-geist-mono), 'Geist Mono', 'MonoLisa', ui-monospace, SFMono-Regular, Menlo, monospace;
-  color-scheme: light;
 
   position: fixed;
   inset: 0;
@@ -95,7 +130,7 @@
 .daybook .grip:disabled { cursor: default; color: var(--edge); transform: none; }
 .daybook .rows.is-sorting > .row[data-id]:not(.is-lifted) { transition: transform 200ms cubic-bezier(.2, .8, .2, 1); }
 .daybook .row.is-lifted, .daybook .row.is-settling { position: relative; z-index: 3; background: var(--bg); border-radius: 6px; }
-.daybook .row.is-lifted { box-shadow: 0 0 0 8px var(--bg), 0 0 0 9px var(--edge), 0 18px 34px -8px rgba(0, 0, 0, 0.2); }
+.daybook .row.is-lifted { box-shadow: 0 0 0 8px var(--bg), 0 0 0 9px var(--edge), 0 18px 34px -8px var(--lift); }
 .daybook .row.is-lifted .grip { color: var(--green-shade); cursor: grabbing; transform: scale(1.15); }
 .daybook.is-dragging, .daybook.is-dragging * { cursor: grabbing !important; user-select: none; }
 @keyframes daybook-landed { from { background: var(--hit-bg); box-shadow: 0 0 0 8px var(--hit-bg); } to { background: var(--bg); box-shadow: 0 0 0 8px transparent; } }
