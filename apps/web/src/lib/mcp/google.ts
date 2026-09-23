@@ -1483,7 +1483,8 @@ export const TOOLS: ToolDefinition[] = [
     name: "slides_read",
     description:
       "Read a Google Slides deck as text, slide by slide. Returns each slide's objectId alongside its " +
-      "text, so an edit can be scoped to one slide.",
+      "text, so an edit can be scoped to one slide, plus the speaker notes and the id of the shape " +
+      "holding them, which is what slides_batch_update writes notes into.",
     inputSchema: {
       type: "object",
       properties: { account, presentation_id: { type: "string" } },
@@ -1498,7 +1499,13 @@ export const TOOLS: ToolDefinition[] = [
       }
       const deck = await api<{
         title?: string;
-        slides?: Array<{ objectId?: string; pageElements?: PageEl[] }>;
+        slides?: Array<{
+          objectId?: string;
+          pageElements?: PageEl[];
+          slideProperties?: {
+            notesPage?: { pageElements?: PageEl[]; notesProperties?: { speakerNotesObjectId?: string } };
+          };
+        }>;
       }>(String(a.account), "GET", `${SLIDES}/${seg(String(a.presentation_id))}`);
 
       const runs = (els: TextEl[] | undefined) =>
@@ -1518,7 +1525,21 @@ export const TOOLS: ToolDefinition[] = [
               }
             }
           }
-          return { number: i + 1, objectId: slide.objectId, text: parts.join("\n") };
+          // Speaker notes live on a separate page whose own id is useless for
+          // writing; the shape that holds the text is the one to target.
+          const notesPage = slide.slideProperties?.notesPage;
+          const notesId = notesPage?.notesProperties?.speakerNotesObjectId;
+          const notesText = (notesPage?.pageElements ?? [])
+            .filter((el) => el.objectId === notesId)
+            .map((el) => runs(el.shape?.text?.textElements).trim())
+            .join("\n");
+          return {
+            number: i + 1,
+            objectId: slide.objectId,
+            text: parts.join("\n"),
+            speakerNotesObjectId: notesId,
+            speakerNotes: notesText,
+          };
         }),
       };
     },
