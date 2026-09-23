@@ -18,3 +18,14 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/resume", label: "Resume", no: "A-03" },
 ];
 
+/**
+ * Sheets that exist only for the owner.
+ *
+ * They are numbered in the same run as the public ones, because they are the
+ * same set: a reader who can open them sees one index, not a public list with
+ * a private appendix.
+ */
+export const OWNER_NAV_ITEMS: NavItem[] = [
+  { href: "/daybook", label: "Daybook", no: "A-04" },
+];
+

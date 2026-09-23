@@ -17,7 +17,11 @@ import { useDismissable } from "@/components/use-dismissable";
  * destination — the key is a title block, not a sidebar, and its height is part
  * of the drawing.
  *
- * Signed out there is nothing to expand: one row, one way in.
+ * Signed out there is nothing to expand: one row, one way in, and it leads to
+ * the Daybook rather than to the settings, because that is the sheet worth
+ * signing in for. Signed in, the row offers no way to sign in again: one entry
+ * to the settings, where connections and passkeys are sheets of their own, and
+ * the way out.
  *
  * The signed-in address is deliberately not shown. There is one account, so
  * naming it says nothing the reader does not know, and it was the thing that
@@ -40,7 +44,7 @@ export function AccountRow({ signedIn }: { signedIn: boolean }) {
 
   if (!signedIn) {
     return (
-      <Link href="/login?next=%2Faccount" className="title-block-row title-block-link">
+      <Link href="/login?next=%2Fdaybook" className="title-block-row title-block-link">
         <span className="title-block-label">Account</span>
         <span className="title-block-value">Sign in</span>
       </Link>
@@ -66,11 +70,7 @@ export function AccountRow({ signedIn }: { signedIn: boolean }) {
       */}
       <div className="title-block-account-menu">
         <Link href="/account" className="title-block-row title-block-link">
-          <span className="title-block-label">Connections</span>
-          <span className="title-block-value">A-04</span>
-        </Link>
-        <Link href="/account/password" className="title-block-row title-block-link">
-          <span className="title-block-label">Sign-in</span>
+          <span className="title-block-label">Settings</span>
           <span className="title-block-value">A-05</span>
         </Link>
         {/* A form, not a link: a GET that destroys a session can be fired by a

@@ -1,4 +1,5 @@
 import { AccountBlock } from "@/components/account-block";
+import { OwnerSheets } from "@/components/owner-sheets";
 import { TitleBlock } from "@/components/title-block";
 
 /**
@@ -63,7 +64,7 @@ export function SheetFrame() {
         <RegistrationMark className="sheet-reg-bl" />
         <RegistrationMark className="sheet-reg-br" />
       </div>
-      <TitleBlock account={<AccountBlock />} />
+      <TitleBlock account={<AccountBlock />} sheets={<OwnerSheets />} />
     </div>
   );
 }

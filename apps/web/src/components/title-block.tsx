@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useState } from "react";
 
+import { IndexRow } from "@/components/index-row";
 import { NAV_ITEMS } from "@/lib/nav";
 import { useDismissable } from "@/components/use-dismissable";
 
@@ -23,11 +24,21 @@ import { useDismissable } from "@/components/use-dismissable";
  * a row of the key rather than moving somewhere else. The key never leaves the
  * corner; only the number of rows in it changes.
  *
+ * `sheets` is a second server-rendered slot, for the rows only the owner can
+ * open. They sit in the index with the public sheets rather than under the
+ * account menu, since they are sheets of the same set.
+ *
  * `account` is a server-rendered slot. The key needs the session to know
  * whether to offer a way in or a way out, and this component is client-side for
  * the fold, so the rows arrive already rendered rather than being fetched here.
  */
-export function TitleBlock({ account }: { account?: React.ReactNode }) {
+export function TitleBlock({
+  account,
+  sheets,
+}: {
+  account?: React.ReactNode;
+  sheets?: React.ReactNode;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
@@ -71,21 +82,10 @@ export function TitleBlock({ account }: { account?: React.ReactNode }) {
       </button>
 
       <ul className="title-block-index">
-        {NAV_ITEMS.map((item) => {
-          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-          return (
-            <li key={item.href}>
-              <Link
-                href={item.href}
-                aria-current={active ? "page" : undefined}
-                className="title-block-row title-block-link"
-              >
-                <span className="title-block-label">{item.label}</span>
-                <span className="title-block-value">{item.no}</span>
-              </Link>
-            </li>
-          );
-        })}
+        {NAV_ITEMS.map((item) => (
+          <IndexRow key={item.href} item={item} />
+        ))}
+        {sheets}
       </ul>
 
       {account}
