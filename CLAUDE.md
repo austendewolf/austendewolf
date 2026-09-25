@@ -39,6 +39,10 @@ Schema, and `run`, collected into arrays and merged in `lib/mcp/registry.ts`.
 `accounts_connect_url` unions with an account's existing scopes and never picks
 up a newly-added default, so a new scope has to be passed explicitly.
 
+`docs/mcp-connector-auth.md` holds the plan for putting OAuth in front of this
+endpoint so claude.ai can add it as a custom connector. Read it before changing
+the bearer check, `next.config.ts`'s rewrite, or anything under `/oauth`.
+
 ## The daybook
 
 `docs/daybook.md` holds the plan and the decisions. Read it before changing
