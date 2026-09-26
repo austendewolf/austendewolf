@@ -39,6 +39,16 @@ Schema, and `run`, collected into arrays and merged in `lib/mcp/registry.ts`.
 `accounts_connect_url` unions with an account's existing scopes and never picks
 up a newly-added default, so a new scope has to be passed explicitly.
 
+There is a second way in, for claude.ai as a custom connector: an access token
+this project's Supabase OAuth server issued, verified in `lib/mcp/connector.ts`
+against `MCP_OAUTH_CLIENT_IDS`. A caller holding one never sees `ADMIN_TOOLS`,
+which `lib/mcp/tools.ts` decides. With that variable unset nothing but the static
+bearer is accepted.
+
+`docs/mcp-connector-auth.md` holds the reasoning, the dashboard settings it
+depends on, and what is still to do. Read it before changing the bearer check,
+`next.config.ts`'s rewrite, or anything under `/oauth`.
+
 ## The daybook
 
 `docs/daybook.md` holds the plan and the decisions. Read it before changing

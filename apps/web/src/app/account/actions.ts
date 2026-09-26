@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getAccount, removeAccount } from "@/lib/mcp/accounts";
 import { authorizeUrl, revoke } from "@/lib/mcp/oauth";
 import { requireOwner } from "@/lib/mcp/owner";
+import { createClient } from "@/lib/supabase/server";
 
 /** Start (or restart) a Google consent for one account. */
 export async function connectAccount(formData: FormData) {
@@ -26,6 +27,30 @@ export async function connectAccount(formData: FormData) {
     redirect(`/account?error=${encodeURIComponent(err instanceof Error ? err.message : String(err))}`);
   }
   redirect(destination);
+}
+
+/**
+ * Cut off an application this project's OAuth server issued tokens to.
+ *
+ * Supabase marks the consent revoked, deletes that client's sessions and kills
+ * its refresh tokens, so nothing can be renewed. An access token already in
+ * flight keeps working until it expires, which is the argument for leaving the
+ * project's JWT expiry at an hour or less.
+ */
+export async function revokeConnector(formData: FormData) {
+  await requireOwner();
+  const clientId = String(formData.get("client") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim() || clientId;
+  if (!clientId) {
+    redirect(`/account/connections?error=${encodeURIComponent("no application was named")}`);
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.oauth.revokeGrant({ clientId });
+  if (error) {
+    redirect(`/account/connections?error=${encodeURIComponent(error.message)}`);
+  }
+  redirect(`/account/connections?revoked=${encodeURIComponent(name)}`);
 }
 
 /** Revoke at Google, then forget the credential locally. */

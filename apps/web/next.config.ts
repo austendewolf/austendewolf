@@ -20,8 +20,21 @@ const nextConfig: NextConfig = {
       beforeFiles: [
         // mcp.austendewolf.com is the endpoint clients are configured with; it
         // serves the same handler as /api/mcp on the apex.
+        //
+        // Named paths rather than `/:path*`. The catch-all sent every path on
+        // this host to the handler, which swallowed
+        // /.well-known/oauth-protected-resource: a client asking which
+        // authorization server guards the endpoint got the JSON-RPC handler's
+        // 405 and could never find the sign-in. The root stays because existing
+        // clients POST the bare origin, and /mcp is the canonical URL a
+        // connector is configured with.
         {
-          source: "/:path*",
+          source: "/",
+          has: [{ type: "host", value: "mcp.austendewolf.com" }],
+          destination: "/api/mcp",
+        },
+        {
+          source: "/mcp",
           has: [{ type: "host", value: "mcp.austendewolf.com" }],
           destination: "/api/mcp",
         },
