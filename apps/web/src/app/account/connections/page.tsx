@@ -1,7 +1,12 @@
 import { ConnectionCard, ScopePicker } from "@/components/mcp/connection-card";
 import { Button } from "@/components/ui/button";
 import { checkAccount, listAccounts } from "@/lib/mcp/accounts";
-import { connectorConfigured, resourceUrl } from "@/lib/mcp/connector";
+import {
+  acceptedClients,
+  connectorConfigured,
+  probeAuthorizationServer,
+  resourceUrl,
+} from "@/lib/mcp/connector";
 import { oauthConfigured, redirectUri } from "@/lib/mcp/oauth";
 import { getViewer } from "@/lib/mcp/owner";
 import { createClient } from "@/lib/supabase/server";
@@ -67,6 +72,8 @@ export default async function ConnectionsPage({
     .listGrants()
     .then(({ data }) => data ?? [])
     .catch(() => []);
+  const probe = await probeAuthorizationServer();
+  const accepted = acceptedClients();
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-16">
@@ -197,11 +204,65 @@ export default async function ConnectionsPage({
           its sessions and refresh tokens; a token already issued stops working when it expires.
         </p>
 
+        {/*
+          The readiness panel. Whether an application can sign in at all depends
+          on three things this page can check and none it can change: a project
+          setting in the Supabase dashboard, a client registered there, and an
+          environment variable naming that client. Checking beats guessing, and
+          asking the authorization server is the only way to know the setting is
+          on.
+        */}
+        <dl className="mt-8 space-y-3 border-t pt-6 text-sm">
+          <Row label="Authorization server">
+            {probe.reachable ? (
+              <span className="text-accent">answering</span>
+            ) : (
+              <span className="text-destructive">
+                {probe.error ?? "not reachable"}
+              </span>
+            )}
+          </Row>
+          {probe.url && (
+            <Row label="Discovery">
+              <span className="font-mono text-xs break-all">{probe.url}</span>
+            </Row>
+          )}
+          <Row label="PKCE S256">
+            {probe.pkce ? (
+              <span className="text-accent">advertised</span>
+            ) : (
+              <span className="text-muted-foreground">not advertised</span>
+            )}
+          </Row>
+          <Row label="Dynamic registration">
+            {probe.dynamicRegistration ? (
+              <span className="text-destructive">on, and it should be off</span>
+            ) : (
+              <span className="text-accent">off</span>
+            )}
+          </Row>
+          <Row label="Accepted clients">
+            {accepted.length ? (
+              <span className="font-mono text-xs break-all">{accepted.join(", ")}</span>
+            ) : (
+              <span className="text-destructive">
+                none, so no token is accepted
+              </span>
+            )}
+          </Row>
+          <Row label="Connector URL">
+            <span className="font-mono text-xs break-all">{resourceUrl()}</span>
+          </Row>
+        </dl>
+
         {!connectorConfigured() && (
-          <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
-            No application can sign in yet. This deployment needs{" "}
-            <code className="font-mono text-xs">MCP_OAUTH_CLIENT_IDS</code> set to the client
-            registered in the Supabase dashboard.
+          <p className="mt-6 text-sm text-muted-foreground leading-relaxed">
+            Nothing can sign in until the OAuth server is enabled in the Supabase dashboard with
+            its authorization path set to <code className="font-mono text-xs">/oauth/consent</code>,
+            a client is registered there against{" "}
+            <code className="font-mono text-xs">https://claude.ai/api/mcp/auth_callback</code>, and{" "}
+            <code className="font-mono text-xs">MCP_OAUTH_CLIENT_IDS</code> names that client. The
+            rows above say which of the three is still missing.
           </p>
         )}
 
@@ -233,6 +294,17 @@ export default async function ConnectionsPage({
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap justify-between gap-4">
+      <dt className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="text-right">{children}</dd>
     </div>
   );
 }

@@ -118,6 +118,98 @@ function trustedClients(): string[] {
     .filter(Boolean);
 }
 
+/**
+ * What the authorization server says about itself.
+ *
+ * The OAuth 2.1 server is a project setting rather than anything this repository
+ * deploys, so whether it is on can only be answered by asking it. The two URLs
+ * exist because the issuer has a path: RFC 8414 inserts that path after the
+ * well-known segment, OpenID Connect discovery appends the well-known segment to
+ * the issuer, and a client may follow either standard. Trying both settles which
+ * one this project actually serves.
+ */
+export interface AuthorizationServerProbe {
+  /** The discovery URL that answered, if any. */
+  url: string | null;
+  reachable: boolean;
+  authorizationEndpoint: string | null;
+  tokenEndpoint: string | null;
+  /** S256 advertised, which a client checks before starting a flow. */
+  pkce: boolean;
+  /** A `registration_endpoint` means dynamic client registration is on. */
+  dynamicRegistration: boolean;
+  error: string | null;
+}
+
+function discoveryUrls(): string[] {
+  const iss = issuer();
+  if (!iss) return [];
+  const url = new URL(iss);
+  const path = url.pathname.replace(/^\/+|\/+$/g, "");
+  return [
+    `${url.origin}/.well-known/oauth-authorization-server${path ? `/${path}` : ""}`,
+    `${iss}/.well-known/openid-configuration`,
+  ];
+}
+
+export async function probeAuthorizationServer(): Promise<AuthorizationServerProbe> {
+  const empty: AuthorizationServerProbe = {
+    url: null,
+    reachable: false,
+    authorizationEndpoint: null,
+    tokenEndpoint: null,
+    pkce: false,
+    dynamicRegistration: false,
+    error: null,
+  };
+
+  const urls = discoveryUrls();
+  if (!urls.length) return { ...empty, error: "NEXT_PUBLIC_SUPABASE_URL is not set" };
+
+  let last: string | null = null;
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {
+        cache: "no-store",
+        // Claude allows ten seconds for a discovery request. A panel on a page
+        // has less patience than that.
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (!res.ok) {
+        last = `${url} answered ${res.status}`;
+        continue;
+      }
+      const body = (await res.json()) as {
+        authorization_endpoint?: string;
+        token_endpoint?: string;
+        code_challenge_methods_supported?: string[];
+        registration_endpoint?: string;
+      };
+      if (!body.authorization_endpoint) {
+        last = `${url} names no authorization endpoint`;
+        continue;
+      }
+      return {
+        url,
+        reachable: true,
+        authorizationEndpoint: body.authorization_endpoint,
+        tokenEndpoint: body.token_endpoint ?? null,
+        pkce: (body.code_challenge_methods_supported ?? []).includes("S256"),
+        dynamicRegistration: Boolean(body.registration_endpoint),
+        error: null,
+      };
+    } catch (err) {
+      last = `${url}: ${err instanceof Error ? err.message : String(err)}`;
+    }
+  }
+  return { ...empty, error: last };
+}
+
+/** The client ids this deployment accepts. Public identifiers, not secrets. */
+export function acceptedClients(): string[] {
+  return trustedClients();
+}
+
 export type Caller =
   | { kind: "machine" }
   | { kind: "connector"; email: string; client: string };

@@ -159,6 +159,23 @@ Steps 1, 2, 4's middle and 6 are ours. Steps 3 and 5 are Supabase's.
 
 ## Configuration, outside the repository
 
+Four steps, in this order, none of which can be done from a container: the
+Supabase management API and the project's own host are both outside the agent
+proxy's allowlist, and neither a Supabase access token nor a Railway token exists
+in that environment. Checked 09/26/2026.
+
+The connections page reports the first three. It asks the authorization server
+for its discovery document on every render and prints which URL answered, whether
+S256 is advertised, whether dynamic registration is on when it should be off, and
+which client ids this deployment accepts. A row reading wrong is the step that has
+not landed.
+
+1. **Supabase dashboard**, as below.
+2. **Register the client**, as below.
+3. **Railway**: set `MCP_OAUTH_CLIENT_IDS` to the client's id and redeploy.
+   Nothing accepts a token before this, whoever signed it.
+4. **claude.ai**: Customize > Connectors > Add custom connector.
+
 In the Supabase dashboard, Authentication > OAuth Server:
 
 - Enable OAuth 2.1 server.
@@ -168,8 +185,15 @@ In the Supabase dashboard, Authentication > OAuth Server:
   before anything else; a wrong Site URL sends consent somewhere else entirely.
 - Leave dynamic client registration **off**.
 
-Register one client by hand, under Authentication > OAuth Apps or through
-`supabase.auth.admin.oauth.createClient`:
+Register one client by hand, under Authentication > OAuth Apps, or with the
+project's secret key:
+
+```
+curl -X POST 'https://<ref>.supabase.co/auth/v1/admin/oauth/clients' \
+  -H "Authorization: Bearer ${SUPABASE_SECRET_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Claude","redirect_uris":["https://claude.ai/api/mcp/auth_callback"],"client_type":"public"}'
+```
 
 - Name: something Austen will recognise on a consent screen, because the screen
   shows it.
@@ -338,7 +362,9 @@ JWT expiry at an hour or less.
    client, then set `MCP_OAUTH_CLIENT_IDS` to its id.
 3. **Token verification and tool narrowing.** Shipped 09/26/2026, in
    `lib/mcp/connector.ts` and `lib/mcp/tools.ts`.
-4. **Revocation.** Shipped 09/26/2026, on the connections page.
+4. **Revocation.** Shipped 09/26/2026, on the connections page, alongside a
+   readiness panel that reports which of the four configuration steps is still
+   outstanding.
 5. **Retire or narrow the static bearer.** Not done, and it is a decision rather
    than a task: retiring it stops the morning run and any terminal client until
    each has another way in. Risk 1 stands until then.
