@@ -96,7 +96,7 @@ button { font: inherit; }
   var CAP = 3;
   var nextId = 1;
   var pending = {};
-  var state = { today: null, items: null, writable: true, busy: {}, error: null };
+  var state = { today: null, items: null, writable: true, busy: {}, error: null, laterShown: false, laterCount: 0 };
 
   function send(msg) { window.parent.postMessage(msg, "*"); }
   function request(method, params) {
@@ -146,6 +146,9 @@ button { font: inherit; }
     state.today = data.today;
     state.items = data.items;
     state.writable = data.writable !== false;
+    // An older server sends every item and no count, which reads as expanded.
+    state.laterShown = data.later_shown !== false;
+    state.laterCount = typeof data.later_count === "number" ? data.later_count : 0;
     state.error = null;
     render();
   }
@@ -157,7 +160,15 @@ button { font: inherit; }
     });
   }
 
-  function refresh() { return callTool("daybook_show", {}).then(take); }
+  function refresh() { return callTool("daybook_show", { later: state.laterShown }).then(take); }
+
+  function expand() {
+    state.laterShown = true;
+    state.expanding = true;
+    render();
+    refresh().catch(function (err) { state.laterShown = false; state.error = err.message; })
+      .then(function () { state.expanding = false; render(); });
+  }
 
   function act(kind, id) {
     var it = find(id);
@@ -239,14 +250,24 @@ button { font: inherit; }
       (state.writable ? "" : '<p class="banner">The server is read-only right now, so the buttons are off.</p>') +
       '<div class="sect">Today <span class="n ' + tone + '">' + n + ' of ' + CAP + '</span></div>' +
       '<div class="rows">' + (today.length ? today.map(function (i) { return row(i, "today"); }).join("") : '<div class="empty">Nothing on today. Pull one up from later.</div>') + '</div>' +
-      '<div class="sect">Later <span class="n">' + later.length + '</span></div>' +
-      '<div class="rows">' + (later.length ? later.map(function (i) { return row(i, "later"); }).join("") : '<div class="empty">Later is empty.</div>') + '</div>';
+      '<div class="sect">Later <span class="n">' + (state.laterShown ? later.length : state.laterCount) + '</span></div>' +
+      '<div class="rows">' + laterRows(later) + '</div>';
+  }
+
+  function laterRows(later) {
+    if (!state.laterShown || state.expanding) {
+      if (!state.laterCount) return '<div class="empty">Later is empty.</div>';
+      return '<div class="empty"><button class="pill is-quiet" data-expand="1"' + (state.expanding ? " disabled" : "") + '>' +
+        (state.expanding ? "Loading" : "Show all " + state.laterCount) + '</button></div>';
+    }
+    return later.length ? later.map(function (i) { return row(i, "later"); }).join("") : '<div class="empty">Later is empty.</div>';
   }
 
   document.addEventListener("click", function (e) {
     var b = e.target.closest && e.target.closest("button");
     if (!b) return;
-    if (b.dataset.act) act(b.dataset.act, b.dataset.id);
+    if (b.dataset.expand) expand();
+    else if (b.dataset.act) act(b.dataset.act, b.dataset.id);
     else if (b.dataset.link) request("ui/open-link", { url: b.dataset.link }).catch(function () {});
   });
 
