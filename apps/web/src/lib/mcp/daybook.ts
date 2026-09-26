@@ -5,6 +5,7 @@ import {
   findTrigger,
   getDay,
   listItems,
+  moveItem,
   setDay,
   todayPT,
   triggersFor,
@@ -13,6 +14,7 @@ import {
   type TriggerInput,
 } from "@/lib/daybook/store";
 import type { ToolDefinition } from "./google";
+import { DAYBOOK_VIEW_URI } from "./views/daybook";
 
 /**
  * The Daybook over MCP.
@@ -187,6 +189,36 @@ export const DAYBOOK_TOOLS: ToolDefinition[] = [
         a.date === undefined ? todayPT() : assertDate(a.date),
         a.updated_at === undefined ? undefined : String(a.updated_at),
       );
+    },
+  },
+  {
+    name: "daybook_show",
+    description:
+      "Show Austen his Daybook as an interactive list in the chat: today's items and later, with Done, " +
+      "Later, Today and Drop on each row. Use when he asks to see or work his list. To read the list " +
+      "for your own reasoning, call daybook_list instead.",
+    inputSchema: { type: "object", properties: {} },
+    ui: { resourceUri: DAYBOOK_VIEW_URI, visibility: ["model", "app"] },
+    run: async () => {
+      const items = await listItems();
+      return { today: todayPT(), writable: WRITES_ALLOWED, items };
+    },
+  },
+  {
+    name: "daybook_move",
+    description: "Move a Daybook item between today and later, keeping that day's focus list in step.",
+    inputSchema: {
+      type: "object",
+      properties: { id: { type: "string" }, horizon: { type: "string", enum: ["today", "later"] } },
+      required: ["id", "horizon"],
+    },
+    // The view's Today and Later buttons. The model already has daybook_upsert.
+    ui: { visibility: ["app"] },
+    run: async (a) => {
+      requireWrites("daybook_move");
+      const horizon = String(a.horizon);
+      if (horizon !== "today" && horizon !== "later") throw new Error("horizon must be today or later");
+      return moveItem(String(a.id), horizon, todayPT());
     },
   },
   {

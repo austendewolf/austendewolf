@@ -1,4 +1,5 @@
 import { listAccounts } from "@/lib/mcp/accounts";
+import { APP_MIME, APPS_EXTENSION, listViews, readView } from "@/lib/mcp/apps";
 import { authConfigured, challenge, resolveCaller, type Caller } from "@/lib/mcp/connector";
 import { resolveUpstream, upstreamTools } from "@/lib/mcp/registry";
 import { toolsFor } from "@/lib/mcp/tools";
@@ -31,10 +32,23 @@ const unauthorized = (error?: "invalid_token") =>
     { status: 401, headers: { "WWW-Authenticate": challenge(error) } },
   );
 
-const toolResult = (payload: unknown, isError = false) => ({
+const toolResult = (payload: unknown, isError = false, structured = false) => ({
   content: [{ type: "text", text: typeof payload === "string" ? payload : JSON.stringify(payload, null, 1) }],
+  // A view reads `structuredContent` rather than parsing the text, so a tool
+  // that feeds one sends both.
+  ...(structured && payload && typeof payload === "object" ? { structuredContent: payload } : {}),
   isError,
 });
+
+/** A JSON-RPC error with its own code, for a method that exists but was asked for something that does not. */
+class RpcError extends Error {
+  constructor(
+    readonly code: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
 
 async function dispatch(
   method: string,
@@ -49,7 +63,13 @@ async function dispatch(
     case "initialize":
       return {
         protocolVersion: (params.protocolVersion as string) ?? PROTOCOL,
-        capabilities: { tools: {} },
+        // `resources` and the apps extension are what make Claude fetch a
+        // tool's view and draw it, rather than showing only the text.
+        capabilities: {
+          tools: {},
+          resources: {},
+          extensions: { [APPS_EXTENSION]: { mimeTypes: [APP_MIME] } },
+        },
         serverInfo: { name: "austen-private-google-workspace", version: "1.0.0" },
       };
     case "ping":
@@ -69,6 +89,7 @@ async function dispatch(
             // Advertise the accounts that actually exist, so a caller does not
             // have to guess the handle.
             inputSchema: withAccountEnum(t.inputSchema, accounts),
+            ...(t.ui ? { _meta: { ui: t.ui } } : {}),
           })),
           ...remote,
         ],
@@ -81,7 +102,7 @@ async function dispatch(
       const tool = visible.find((t) => t.name === name);
       if (tool) {
         try {
-          return toolResult(await tool.run(args));
+          return toolResult(await tool.run(args), false, Boolean(tool.ui));
         } catch (err) {
           return toolResult(err instanceof Error ? err.message : String(err), true);
         }
@@ -97,6 +118,13 @@ async function dispatch(
       } catch (err) {
         return toolResult(err instanceof Error ? err.message : String(err), true);
       }
+    }
+    case "resources/list":
+      return { resources: listViews() };
+    case "resources/read": {
+      const read = readView(String(params.uri ?? ""));
+      if (!read) throw new RpcError(-32002, `resource not found: ${String(params.uri ?? "")}`);
+      return read;
     }
     default:
       return null;
@@ -146,12 +174,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const result = await dispatch(
-    message.method ?? "",
-    message.params ?? {},
-    !request.headers.get(GATEWAY_HEADER),
-    caller,
-  );
+  let result: unknown | null;
+  try {
+    result = await dispatch(message.method ?? "", message.params ?? {}, !request.headers.get(GATEWAY_HEADER), caller);
+  } catch (err) {
+    if (!(err instanceof RpcError)) throw err;
+    if (message.id === undefined) return new Response(null, { status: 202 });
+    return Response.json({ jsonrpc: "2.0", id: message.id, error: { code: err.code, message: err.message } });
+  }
 
   // A notification carries no id and expects no body.
   if (message.id === undefined) return new Response(null, { status: 202 });

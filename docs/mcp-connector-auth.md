@@ -320,6 +320,19 @@ if the step-up consent flow turns out to be worth it. Counted on 09/26/2026: 44
 tools on the machine path, 41 for a connector, and the three missing ones are
 `accounts_list`, `accounts_connect_url` and `accounts_disconnect`.
 
+### Views in the chat
+
+The server speaks the MCP Apps extension (`io.modelcontextprotocol/ui`,
+2026-01-26), so a tool can carry a page Claude draws beside its result.
+`daybook_show` is the first: it names `ui://daybook/list`, which
+`lib/mcp/apps.ts` serves from `resources/read`. `daybook_move` is visible to that
+page only, backing its Today and Later buttons.
+
+The page runs in a sandboxed frame on Claude's own domain, so it has no site
+cookie and fetches nothing. Every read and write is a `tools/call` the page sends
+through Claude, which attaches this connector's token, so the gate above is the
+only gate. Its CSP allows no origins for the same reason.
+
 ### Revocation
 
 `supabase.auth.oauth.listGrants()` and `revokeGrant({ clientId })` are

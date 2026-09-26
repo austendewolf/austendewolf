@@ -433,6 +433,12 @@ export interface ToolDefinition {
   description: string;
   inputSchema: Record<string, unknown>;
   run: (args: Record<string, unknown>) => Promise<unknown>;
+  /**
+   * An MCP Apps view to draw with the result, and who may call the tool. A tool
+   * with `app` visibility only is one the view calls and the model never sees.
+   * See `apps.ts`.
+   */
+  ui?: { resourceUri?: string; visibility?: Array<"model" | "app"> };
 }
 
 const account = { type: "string", description: "Which connected Google account to act as" };
