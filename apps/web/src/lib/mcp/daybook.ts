@@ -195,13 +195,27 @@ export const DAYBOOK_TOOLS: ToolDefinition[] = [
     name: "daybook_show",
     description:
       "Show Austen his Daybook as an interactive list in the chat: today's items and later, with Done, " +
-      "Later, Today and Drop on each row. Use when he asks to see or work his list. To read the list " +
-      "for your own reasoning, call daybook_list instead.",
-    inputSchema: { type: "object", properties: {} },
+      "Later, Today and Drop on each row. Use when he asks to see or work his list. Later shows as a " +
+      "count unless later is true; pass it only when he asks for later or the whole list. To read the " +
+      "list for your own reasoning, call daybook_list instead.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        later: { type: "boolean", default: false, description: "Include the later items, not only their count" },
+      },
+    },
     ui: { resourceUri: DAYBOOK_VIEW_URI, visibility: ["model", "app"] },
-    run: async () => {
-      const items = await listItems();
-      return { today: todayPT(), writable: WRITES_ALLOWED, items };
+    run: async (a) => {
+      const all = await listItems();
+      const later = all.filter((i) => i.horizon !== "today");
+      const showLater = a.later === true;
+      return {
+        today: todayPT(),
+        writable: WRITES_ALLOWED,
+        later_shown: showLater,
+        later_count: later.length,
+        items: showLater ? all : all.filter((i) => i.horizon === "today"),
+      };
     },
   },
   {
