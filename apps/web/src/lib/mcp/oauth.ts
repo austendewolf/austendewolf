@@ -123,10 +123,18 @@ function signState(account: string, scopes: string[]): string {
 }
 
 function hmac(payload: string): string {
-  // Reuse the bearer token material as the signing key: it is already a
-  // server-only secret, and rotating it invalidates in-flight consents, which
-  // is the correct behaviour.
-  const key = process.env.MCP_TOKENS ?? process.env.GOOGLE_CLIENT_SECRET ?? "";
+  // `MCP_SIGNING_KEY` is the key this is supposed to use. It reads `MCP_TOKENS`
+  // after it because that is what signed every consent before the key existed,
+  // and a deployment without the new variable should keep working rather than
+  // reject links it issued minutes ago. A bearer token doubling as signing
+  // material is the thing being retired here: rotating the credential should not
+  // silently invalidate consents, and the two secrets have no reason to share a
+  // lifetime.
+  const key =
+    process.env.MCP_SIGNING_KEY ??
+    process.env.MCP_TOKENS ??
+    process.env.GOOGLE_CLIENT_SECRET ??
+    "";
   return createHmac("sha256", key).update(payload).digest("base64url");
 }
 

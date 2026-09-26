@@ -1,14 +1,8 @@
-import { bearerMatches, mcpTokens } from "@awd/auth";
-
 import { listAccounts } from "@/lib/mcp/accounts";
-import { ADMIN_TOOLS } from "@/lib/mcp/admin";
-import { DAYBOOK_TOOLS } from "@/lib/mcp/daybook";
-import { TOOLS } from "@/lib/mcp/google";
+import { authConfigured, challenge, resolveCaller, type Caller } from "@/lib/mcp/connector";
 import { resolveUpstream, upstreamTools } from "@/lib/mcp/registry";
+import { toolsFor } from "@/lib/mcp/tools";
 import { GATEWAY_HEADER } from "@/lib/mcp/upstream";
-
-// Google APIs, the Daybook, and the tools that manage this server's own connections.
-const ALL_TOOLS = [...TOOLS, ...DAYBOOK_TOOLS, ...ADMIN_TOOLS];
 
 // Route handlers are uncached by default in this version, and only GET can opt
 // in, so POST needs no cache configuration. `runtime` is still a valid segment
@@ -19,14 +13,23 @@ export const runtime = "nodejs";
  * The MCP endpoint.
  *
  * A remote MCP server with auth in front of it: JSON-RPC over POST, guarded by
- * a bearer token. The token check lives in `@awd/auth` so this server and the
- * workout one cannot disagree about what a valid credential is.
+ * either the static bearer a machine holds or an access token this site's
+ * Supabase project issued to a connector. `connector.ts` decides which, and the
+ * caller it returns also decides which tools are visible.
+ *
+ * An unauthenticated request is refused with a 401 carrying a
+ * `WWW-Authenticate` header rather than a tool error in a 200, because that
+ * header is what turns a refusal into an offer to sign in.
  */
 
 const PROTOCOL = "2025-06-18";
 const MAX_BODY = 1_048_576;
 
-const authorized = (request: Request) => bearerMatches(request);
+const unauthorized = (error?: "invalid_token") =>
+  Response.json(
+    { error: error ?? "unauthorized", error_description: "This endpoint requires authorization." },
+    { status: 401, headers: { "WWW-Authenticate": challenge(error) } },
+  );
 
 const toolResult = (payload: unknown, isError = false) => ({
   content: [{ type: "text", text: typeof payload === "string" ? payload : JSON.stringify(payload, null, 1) }],
@@ -38,7 +41,10 @@ async function dispatch(
   params: Record<string, unknown>,
   /** False when the caller is itself a gateway, to stop a cycle expanding. */
   includeUpstreams: boolean,
+  caller: Caller,
 ): Promise<unknown | null> {
+  const visible = toolsFor(caller);
+
   switch (method) {
     case "initialize":
       return {
@@ -57,7 +63,7 @@ async function dispatch(
       ]);
       return {
         tools: [
-          ...ALL_TOOLS.map((t) => ({
+          ...visible.map((t) => ({
             name: t.name,
             description: t.description,
             // Advertise the accounts that actually exist, so a caller does not
@@ -72,7 +78,7 @@ async function dispatch(
       const name = String(params.name ?? "");
       const args = (params.arguments as Record<string, unknown>) ?? {};
 
-      const tool = ALL_TOOLS.find((t) => t.name === name);
+      const tool = visible.find((t) => t.name === name);
       if (tool) {
         try {
           return toolResult(await tool.run(args));
@@ -108,11 +114,15 @@ function withAccountEnum(schema: Record<string, unknown>, accounts: string[]) {
 }
 
 export async function POST(request: Request) {
-  if (!mcpTokens().length) {
+  if (!authConfigured()) {
     return Response.json({ error: "server is not configured" }, { status: 503 });
   }
-  if (!authorized(request)) {
-    return Response.json({ error: "unauthorized" }, { status: 401 });
+
+  const caller = await resolveCaller(request);
+  if (!caller) {
+    // A presented-but-rejected credential is `invalid_token`, which is what makes
+    // a client refresh and retry rather than give up.
+    return unauthorized(request.headers.get("authorization") ? "invalid_token" : undefined);
   }
 
   const raw = await request.text();
@@ -140,6 +150,7 @@ export async function POST(request: Request) {
     message.method ?? "",
     message.params ?? {},
     !request.headers.get(GATEWAY_HEADER),
+    caller,
   );
 
   // A notification carries no id and expects no body.

@@ -1,9 +1,11 @@
 import { ConnectionCard, ScopePicker } from "@/components/mcp/connection-card";
 import { Button } from "@/components/ui/button";
 import { checkAccount, listAccounts } from "@/lib/mcp/accounts";
+import { connectorConfigured, resourceUrl } from "@/lib/mcp/connector";
 import { oauthConfigured, redirectUri } from "@/lib/mcp/oauth";
 import { getViewer } from "@/lib/mcp/owner";
-import { connectAccount } from "@/app/account/actions";
+import { createClient } from "@/lib/supabase/server";
+import { connectAccount, revokeConnector } from "@/app/account/actions";
 
 export const metadata = { title: "Connections — Austen DeWolf" };
 export const runtime = "nodejs";
@@ -18,9 +20,14 @@ export const runtime = "nodejs";
 export default async function ConnectionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ connected?: string; removed?: string; error?: string }>;
+  searchParams: Promise<{
+    connected?: string;
+    removed?: string;
+    revoked?: string;
+    error?: string;
+  }>;
 }) {
-  const { connected, removed, error } = await searchParams;
+  const { connected, removed, revoked, error } = await searchParams;
   const viewer = await getViewer();
 
   if (!viewer.isOwner) {
@@ -51,6 +58,16 @@ export default async function ConnectionsPage({
   const health = await Promise.all(accounts.map((a) => checkAccount(a.name)));
   const configured = oauthConfigured();
 
+  // Applications this project's own OAuth server has issued tokens to, which is
+  // how a Claude connector holds a credential for the MCP endpoint. An empty list
+  // is the normal state until one is connected, and an error here should not take
+  // the Google half of the page down with it.
+  const supabase = await createClient();
+  const grants = await supabase.auth.oauth
+    .listGrants()
+    .then(({ data }) => data ?? [])
+    .catch(() => []);
+
   return (
     <div className="mx-auto max-w-3xl px-6 py-16">
       {/*
@@ -73,6 +90,11 @@ export default async function ConnectionsPage({
       {removed && (
         <p className="mt-6 border px-4 py-3 text-sm">
           <span className="text-accent">{removed}</span> was removed and revoked at Google.
+        </p>
+      )}
+      {revoked && (
+        <p className="mt-6 border px-4 py-3 text-sm">
+          <span className="text-accent">{revoked}</span> can no longer reach the gateway.
         </p>
       )}
       {error && (
@@ -161,6 +183,56 @@ export default async function ConnectionsPage({
         ))}
       </div>
 
+      {/*
+        The other direction. Everything above is an account this server acts as;
+        this is an application allowed to act as Austen against the gateway.
+      */}
+      <div className="mt-20 border-t pt-8">
+        <h2 className="text-xs uppercase tracking-widest text-muted-foreground">
+          Applications with access
+        </h2>
+        <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
+          Signed in through this site to reach{" "}
+          <code className="font-mono text-xs break-all">{resourceUrl()}</code>. Revoking one kills
+          its sessions and refresh tokens; a token already issued stops working when it expires.
+        </p>
+
+        {!connectorConfigured() && (
+          <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
+            No application can sign in yet. This deployment needs{" "}
+            <code className="font-mono text-xs">MCP_OAUTH_CLIENT_IDS</code> set to the client
+            registered in the Supabase dashboard.
+          </p>
+        )}
+
+        <div className="mt-6 space-y-4">
+          {grants.length === 0 && (
+            <p className="text-sm text-muted-foreground">Nothing has been authorized.</p>
+          )}
+
+          {grants.map((grant) => (
+            <div
+              key={grant.client.id}
+              className="flex flex-wrap items-baseline justify-between gap-4 border px-4 py-3"
+            >
+              <div>
+                <p className="text-sm">{grant.client.name}</p>
+                <p className="mt-1 font-mono text-xs text-muted-foreground">
+                  {grant.scopes.join(" ") || "no scopes"} · since{" "}
+                  {new Date(grant.granted_at).toLocaleDateString("en-US")}
+                </p>
+              </div>
+              <form action={revokeConnector}>
+                <input type="hidden" name="client" value={grant.client.id} />
+                <input type="hidden" name="name" value={grant.client.name} />
+                <Button type="submit" variant="destructive" size="sm">
+                  Revoke
+                </Button>
+              </form>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

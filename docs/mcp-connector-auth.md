@@ -1,6 +1,8 @@
 # MCP connector auth on austendewolf.com
 
-Drafted 09/25/2026. Nothing here is shipped yet.
+Drafted 09/25/2026. The code shipped 09/26/2026; the dashboard settings and the
+registered client are still to do, and until `MCP_OAUTH_CLIENT_IDS` is set the
+endpoint behaves as it always did.
 
 The first draft had this site building its own OAuth authorization server. That
 was wrong: Supabase Auth can act as an OAuth 2.1 server, the feature is on this
@@ -228,17 +230,25 @@ advantage, and it is the same property that makes it impossible to revoke.
 
 ## What this repository adds
 
-| Route | Host | Does |
-|---|---|---|
-| `GET /.well-known/oauth-protected-resource` | both | `resource`, `authorization_servers: ["https://<ref>.supabase.co/auth/v1"]`, `bearer_methods_supported: ["header"]` |
-| `GET /.well-known/oauth-protected-resource/mcp` | both | Same document, RFC 9728's path-suffixed variant, which clients try first when the resource URL has a path |
-| `GET /oauth/consent` | apex | The consent screen |
-| `POST /api/oauth/decision` | apex | Approve or deny, then redirect where Supabase says |
-| `POST /api/mcp` | both | The gate, ahead of the JSON-RPC dispatch |
+| Route | Host | File | Does |
+|---|---|---|---|
+| `GET /.well-known/oauth-protected-resource` | both | `app/.well-known/oauth-protected-resource/[[...suffix]]/route.ts` | `resource`, `authorization_servers: ["https://<ref>.supabase.co/auth/v1"]`, `scopes_supported`, `bearer_methods_supported` |
+| `GET /.well-known/oauth-protected-resource/mcp` | both | the same optional catch-all | RFC 9728's path-suffixed variant, which clients try first when the resource URL has a path. Any other suffix 404s |
+| `GET /oauth/consent` | apex | `app/oauth/consent/page.tsx` | The consent screen |
+| `POST /api/oauth/decision` | apex | `app/api/oauth/decision/route.ts` | Approve or deny, then redirect where Supabase says |
+| `POST /api/mcp` | both | `app/api/mcp/route.ts`, `lib/mcp/connector.ts`, `lib/mcp/tools.ts` | The gate, ahead of the JSON-RPC dispatch, and the tool surface it allows |
 
 The rewrite narrows from `/:path*` to exactly `/` and `/mcp`, so clients that
 POST the bare origin keep working and everything else on the subdomain serves
 normal app routes. Canonical connector URL: `https://mcp.austendewolf.com/mcp`.
+
+Three environment variables, all optional, all failing closed:
+
+| Variable | Does |
+|---|---|
+| `MCP_OAUTH_CLIENT_IDS` | The OAuth clients whose access tokens are accepted, comma separated. Empty means no token is accepted however well signed, which is what makes deploying this ahead of the dashboard work a no-op |
+| `MCP_RESOURCE_URL` | The connector URL, defaulting to `https://mcp.austendewolf.com/mcp`. It has to match what gets typed into Claude exactly, so it is one value in one place |
+| `MCP_SIGNING_KEY` | Signs the Google consent state, replacing the borrowed `MCP_TOKENS`. Unset, it falls back to the old behaviour so in-flight consents survive the deploy |
 
 ### The consent screen
 
@@ -280,17 +290,24 @@ client gets `DAYBOOK_TOOLS`, the Google `TOOLS`, and the fronted upstreams.
 manage the credentials every other tool depends on, so they stay on the dashboard
 and the machine path, hidden from `tools/list` and answered as an unknown tool.
 
-This is policy in `lib/mcp/registry.ts`, not an OAuth scope, because Supabase
-offers no custom scopes. A Custom Access Token Hook could stamp per-client claims
-later if the step-up consent flow turns out to be worth it.
+This is policy in `lib/mcp/tools.ts`, not an OAuth scope, because Supabase offers
+no custom scopes. A Custom Access Token Hook could stamp per-client claims later
+if the step-up consent flow turns out to be worth it. Counted on 09/26/2026: 44
+tools on the machine path, 41 for a connector, and the three missing ones are
+`accounts_list`, `accounts_connect_url` and `accounts_disconnect`.
 
 ### Revocation
 
-`auth.oauth_consents` has `revoked_at` per user and client, so the connections
-page gains a row for the connector and a button that revokes it, alongside the
-Google accounts it already lists. A revoked consent stops the refresh; the
-access token still works until it expires, which is the argument for keeping the
-project's JWT expiry at an hour or less.
+`supabase.auth.oauth.listGrants()` and `revokeGrant({ clientId })` are
+user-scoped, so the connections page reads and cuts off its own grants with the
+session it already has. The first draft had this reading `auth.oauth_consents`
+directly, which `awd_app` has no privilege on and which would have meant putting
+a service-role key on the server for a button.
+
+Revoking marks the consent revoked, deletes that client's sessions and kills its
+refresh tokens, so nothing can be renewed. An access token already in flight
+keeps working until it expires, which is the argument for leaving the project's
+JWT expiry at an hour or less.
 
 ## Residual risk, named
 
@@ -311,24 +328,46 @@ project's JWT expiry at an hour or less.
 
 ## Phases
 
-1. **Discovery and the gate.** Narrow the rewrite, serve the protected resource
-   metadata, return the 401 with `WWW-Authenticate`. Verifiable with curl before
-   any Supabase configuration.
-2. **Supabase configuration and consent.** Enable the OAuth server, set the
-   authorization path, confirm Site URL, register the client, build
-   `/oauth/consent` and the decision route.
-3. **Token verification and tool narrowing** in the route.
-4. **Revocation** on the connections page, reading `auth.oauth_consents`.
-5. **Retire or narrow the static bearer**, or accept risk 1 in writing.
+1. **Discovery and the gate.** Shipped 09/26/2026. The rewrite is narrowed, the
+   metadata document is served at both shapes, and an unauthenticated call is
+   refused with the challenge header.
+2. **Supabase configuration and consent.** The code is shipped: `/oauth/consent`
+   and the decision route. The dashboard half is Austen's and is listed under
+   *Configuration, outside the repository* above: enable the OAuth server, set
+   the authorization path to `/oauth/consent`, confirm Site URL, register the
+   client, then set `MCP_OAUTH_CLIENT_IDS` to its id.
+3. **Token verification and tool narrowing.** Shipped 09/26/2026, in
+   `lib/mcp/connector.ts` and `lib/mcp/tools.ts`.
+4. **Revocation.** Shipped 09/26/2026, on the connections page.
+5. **Retire or narrow the static bearer.** Not done, and it is a decision rather
+   than a task: retiring it stops the morning run and any terminal client until
+   each has another way in. Risk 1 stands until then.
 
-Unrelated and cheap, worth doing while phase 1 is open: give the Google consent
-state its own signing key instead of borrowing `MCP_TOKENS`.
+Done alongside phase 1: the Google consent state has its own signing key
+(`MCP_SIGNING_KEY`) instead of borrowing `MCP_TOKENS`.
 
 ## Verification
 
-Not yet run: this container's egress policy blocks `*.supabase.co`, so the live
-discovery documents could not be fetched from here. These are the first checks,
-from a shell that can reach the project:
+Run locally against a production build on 09/26/2026, with `MCP_TOKENS` and
+`MCP_OAUTH_CLIENT_IDS` set to test values:
+
+| Check | Result |
+|---|---|
+| `POST /api/mcp` with no credential | 401, `WWW-Authenticate: Bearer resource_metadata="https://mcp.austendewolf.com/.well-known/oauth-protected-resource/mcp", scope="email"` |
+| `POST /api/mcp` with a bogus bearer | 401, `error="invalid_token"`, which is what makes a client refresh rather than give up |
+| `POST /api/mcp` with the static bearer | `initialize` answers as before |
+| A notification with no id | 202, unchanged |
+| `GET /api/mcp` | 405, unchanged |
+| `GET /.well-known/oauth-protected-resource` | 200, `resource` equal to the connector URL |
+| `GET /.well-known/oauth-protected-resource/mcp` | 200, same document |
+| `GET /.well-known/oauth-protected-resource/anything-else` | 404 |
+| `/oauth/consent` with no `authorization_id` | 200, explains itself |
+| `/oauth/consent?authorization_id=…` signed out | 307 to `/login?next=…` |
+| `POST /api/oauth/decision` with no session | 403 |
+| Tool counts | 44 on the machine path, 41 for a connector |
+
+Still to run, against the live project. This container's egress policy blocks
+`*.supabase.co`, so none of the following could be checked from here:
 
 - `curl -s https://<ref>.supabase.co/.well-known/oauth-authorization-server/auth/v1`
   returns metadata naming the authorize and token endpoints. The OIDC form at
@@ -337,10 +376,8 @@ from a shell that can reach the project:
   a path (`/auth/v1`), so RFC 8414 puts its metadata at the first URL while OIDC
   discovery puts it at the second. Claude accepts either standard, and a single
   connect attempt settles which one it follows.
-- `curl -si https://mcp.austendewolf.com/mcp -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'`
-  returns 401 with a `WWW-Authenticate` header naming the metadata URL.
-- `curl -s https://mcp.austendewolf.com/.well-known/oauth-protected-resource`
-  returns a `resource` equal to `https://mcp.austendewolf.com/mcp`.
+- The same two checks above against the deployed site rather than a local build,
+  confirming the narrowed rewrite serves the metadata document on the subdomain.
 - The existing bearer still works, so the morning run and Claude Code are
   unaffected.
 
@@ -358,9 +395,10 @@ Three negative tests worth running once:
 
 ## Open decisions
 
-- Canonical URL: `https://mcp.austendewolf.com/mcp`, which this plan assumes,
-  against the bare origin the current clients use. The `resource` field must
-  match what gets typed into the dialog, so this is picked once.
+- Canonical URL: `https://mcp.austendewolf.com/mcp`, which the code defaults to
+  and `MCP_RESOURCE_URL` overrides, against the bare origin the current clients
+  use. The `resource` field must match what gets typed into the dialog, so this
+  is picked once. Both paths reach the handler either way.
 - ~~Which tool groups the Claude client gets on day one.~~ Settled 09/26/2026:
   daybook and Google both, from the start. Claude's own Google Workspace
   connector holds one Google account at a time, and reaching a second one means
