@@ -89,7 +89,11 @@ async function dispatch(
             // Advertise the accounts that actually exist, so a caller does not
             // have to guess the handle.
             inputSchema: withAccountEnum(t.inputSchema, accounts),
-            ...(t.ui ? { _meta: { ui: t.ui } } : {}),
+            // Hosts that predate the nested form read the flat `ui/resourceUri`
+            // key, so a tool with a view sends both.
+            ...(t.ui
+              ? { _meta: { ui: t.ui, ...(t.ui.resourceUri ? { "ui/resourceUri": t.ui.resourceUri } : {}) } }
+              : {}),
           })),
           ...remote,
         ],
