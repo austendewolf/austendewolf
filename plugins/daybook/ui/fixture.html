@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daybook fixture</title>
+<!--
+  Every state daybook.js draws, from invented data. Open it straight from disk.
+  The bar sets the theme and the width, and the hash keeps them across reloads:
+  fixture.html#dark,375. Messages the demos would send land in the log.
+-->
+<style>
+  :root { color-scheme: light dark; }
+  :root[data-theme="light"] { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
+  body {
+    margin: 0;
+    padding: 16px;
+    background: light-dark(#fbfbfb, #101010);
+    color: light-dark(#1c1c1c, #f8f8f8);
+    font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  .bar { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 20px; font: 11px ui-monospace, Menlo, monospace; }
+  .bar a { color: light-dark(#646464, #8f8f8f); }
+  .bar a.on { color: inherit; font-weight: 500; text-decoration: none; }
+  .frame { width: var(--w, 680px); max-width: 100%; margin: 0 0 40px; }
+  h2 { margin: 0 0 10px; font: 500 11px ui-monospace, Menlo, monospace; letter-spacing: 1px; text-transform: uppercase; color: light-dark(#9c9c9c, #666666); }
+  #log { margin: 0; min-height: 3em; padding: 8px 10px; border-left: 2px solid light-dark(#27a570, #30cf8c); font: 11px/1.6 ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<div class="bar" id="bar"></div>
+
+<section class="frame"><h2>1. Claude Code widget, later open</h2><div id="demo-open"></div></section>
+<section class="frame"><h2>2. Claude Code widget, later as a count, four on today</h2><div id="demo-count"></div></section>
+<section class="frame"><h2>3. The site's view, presses call the server</h2><div id="demo-call"></div></section>
+<section class="frame"><h2>4. Read-only and empty</h2><div id="demo-empty"></div></section>
+<section class="frame"><h2>5. Notebook flush</h2><div id="demo-flush"></div></section>
+<section class="frame"><h2>Messages sent</h2><pre id="log"></pre></section>
+
+<script>
+  (function () {
+    var THEMES = ["auto", "light", "dark"];
+    var WIDTHS = ["680", "375"];
+    function read() {
+      var p = location.hash.slice(1).split(",");
+      return {
+        theme: THEMES.indexOf(p[0]) >= 0 ? p[0] : "auto",
+        width: WIDTHS.indexOf(p[1]) >= 0 ? p[1] : "680",
+      };
+    }
+    function apply() {
+      var s = read();
+      var root = document.documentElement;
+      if (s.theme === "auto") root.removeAttribute("data-theme");
+      else root.setAttribute("data-theme", s.theme);
+      root.style.setProperty("--w", s.width + "px");
+      document.getElementById("bar").innerHTML =
+        THEMES.map(function (t) { return '<a href="#' + t + "," + s.width + '"' + (t === s.theme ? ' class="on"' : "") + ">" + t + "</a>"; }).join("") +
+        WIDTHS.map(function (w) { return '<a href="#' + s.theme + "," + w + '"' + (w === s.width ? ' class="on"' : "") + ">" + w + "px</a>"; }).join("");
+    }
+    window.addEventListener("hashchange", apply);
+    apply();
+  })();
+
+  window.sendPrompt = function (text) {
+    document.getElementById("log").textContent += text + "\n";
+  };
+
+  // Dates move with the calendar so due text always has something to say.
+  function ptToday() {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  }
+  function day(n) {
+    return new Date(Date.parse(ptToday() + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
+  }
+
+  var TODAY = [
+    { id: "fx:checklist", title: "Send Sam the revised launch checklist, Thursday morning", horizon: "today", priority: 1, due: day(1), person: "sam.rivera@example.com", link: "https://example.slack.com/archives/C0123ABCD/p1700000000000100", source: "DM, Sam Rivera 09/28" },
+    { id: "fx:pricing", title: "Review the pricing page draft with Lee before the design sync", horizon: "today", priority: 2, due: day(0) + "T13:30", link: "https://docs.google.com/document/d/1FaKeDoCuMeNtIdAbCdEf/edit", source: "Doc comments AAAAbCdEfGhIjKlM and AAAAzYxWvUtSrQp, 09/25; unresolved" },
+    { id: "fx:offsite", title: "Book the room for the quarterly planning offsite", horizon: "today", priority: 3, person: "jo.anne-marie@example.com", source: "Notebook 09/29" },
+  ];
+  var LATER = [
+    { id: "fx:freeze", title: "Ask Priya in the leads channel whether the migration waits for the freeze", horizon: "later", priority: 4, due: day(-2), person: "priya.natarajan@example.com", link: "https://example.slack.com/archives/C0456EFGH/p1700000000000200", source: "#eng-leads, Priya 09/25" },
+    { id: "fx:onepager", title: "Write the one-pager for the onboarding revamp", horizon: "later", priority: 5, due: day(9), link: "https://example.atlassian.net/browse/ABC-123", source: "ABC-123" },
+    { id: "fx:branch", title: "Reply to the review bot about the stale release branch", horizon: "later", priority: 6, link: "https://github.com/example/repo/pull/42", source: "GitHub bot DM, 24 days stale" },
+    { id: "fx:pto", title: "Approve the time-off requests waiting in the HR tool", horizon: "later", priority: 7, due: day(20), source: "HR time-off requests" },
+    { id: "fx:retro", title: "Draft the agenda for the team retro, next Tuesday", horizon: "later", priority: 8, source: "Austen, 09/28. Wants a written round first" },
+    { id: "fx:survey", title: "Send the quarterly survey results to the leads", horizon: "later", priority: null, link: "https://docs.google.com/spreadsheets/d/1FaKeShEeTiDaBcDeF/edit", source: "Quarterly survey sheet" },
+  ];
+  function copy(x) { return JSON.parse(JSON.stringify(x)); }
+
+  (window.DAYBOOK = window.DAYBOOK || []).push(
+    ["list", "demo-open", { today: ptToday(), writable: true, later_shown: true, later_count: LATER.length, notes_count: 23, items: copy(TODAY.concat(LATER)) }, { mode: "message" }],
+    ["list", "demo-count", {
+      today: ptToday(), writable: true, later_shown: false, later_count: 17, notes_count: 1,
+      items: copy(TODAY).concat([{ id: "fx:fourth", title: "Call the venue back about catering numbers", horizon: "today", priority: 4, due: day(3), source: "Notebook 09/30" }]),
+    }, { mode: "message" }]
+  );
+</script>
+<script src="./daybook.js"></script>
+<script>
+  // A stand-in for the server behind the site's view: it checks updated_at the
+  // way daybook_close does, and one item changes underneath the first press.
+  (function () {
+    var clock = 0;
+    var store = copy(TODAY.concat(LATER)).concat([
+      { id: "fx:conflict", title: "Send the vendor the signed renewal, Friday", horizon: "later", priority: 9, due: day(2), source: "Notebook 09/29" },
+    ]).map(function (i) { i.updated_at = "2026-01-01T00:00:0" + (clock++ % 10) + "Z"; return i; });
+    var raced = false;
+    function wait(v) { return new Promise(function (res) { setTimeout(function () { res(v); }, 350); }); }
+    function find(id) { return store.filter(function (i) { return i.id === id; })[0]; }
+    function snapshot(later) {
+      var shown = store.filter(function (i) { return later || i.horizon === "today"; });
+      return { today: ptToday(), writable: true, later_shown: !!later, later_count: store.filter(function (i) { return i.horizon !== "today"; }).length, notes_count: 5, items: copy(shown) };
+    }
+    function call(name, args) {
+      return wait().then(function () {
+        var it = find(args.id);
+        if (!it) throw new Error("no open item " + args.id);
+        if (it.id === "fx:conflict" && !raced) {
+          raced = true;
+          it.title = "Send the vendor the signed renewal, Monday instead";
+          it.updated_at = "2026-02-02T00:00:00Z";
+        }
+        if (name === "daybook_close") {
+          if (args.updated_at && args.updated_at !== it.updated_at) throw new Error("updated_at does not match; the item changed since it was read");
+          store = store.filter(function (i) { return i !== it; });
+          return { closed: it.id };
+        }
+        if (name === "daybook_move") {
+          it.horizon = args.horizon;
+          it.updated_at = new Date().toISOString();
+          return { moved: it.id };
+        }
+        throw new Error("unknown tool " + name);
+      });
+    }
+    window.DAYBOOK.push(["list", "demo-call", snapshot(false), {
+      mode: "call",
+      call: call,
+      load: function (o) { return wait(snapshot(o.later)); },
+    }]);
+  })();
+
+  window.DAYBOOK.push(["list", "demo-empty", { today: ptToday(), writable: false, later_shown: true, later_count: 0, notes_count: 1, items: [] }]);
+
+  window.DAYBOOK.push(["flush", "demo-flush", {
+    dates: "09/28 and 09/29",
+    rows: [
+      ["Actions"],
+      { id: "notebook:2026-09-29:checklist", k: "new", t: "Send Sam the revised launch checklist, Thursday morning", p: 1, due: day(1), m: "merged with a second line about the checklist", l: "https://example.slack.com/archives/C0123ABCD/p1700000000000100" },
+      { id: "action:austen:pricing", k: "edit", old: "Review pricing page", t: "Review the pricing page draft with Lee before the design sync", p: 2, due: day(0) + "T13:30" },
+      { id: "notebook:2026-09-29:vendor", k: "new", t: "Ask the vendor about renewal terms", p: 9, f: "no cue yet, add a when" },
+      ["Notes"],
+      { id: "notebook:2026-09-29:retro", k: "note", t: "The team wants shorter retros, and Lee suggested a written round first.", m: "from Lee", as: { new: { t: "Ask Lee to draft the written retro round before next Tuesday", p: 8, due: day(6) } } },
+      { id: "notebook:2026-09-28:takehome", k: "decision", t: "Keep the take-home exercise for senior hires through the end of the year." },
+      ["Closing"],
+      { id: "action:austen:offsite", k: "done", t: "Book the room for the quarterly planning offsite", m: "closes an open item", l: "https://example.slack.com/archives/C0789IJKL/p1700000000000300" },
+    ],
+  }]);
+</script>
+</body>
+</html>

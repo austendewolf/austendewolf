@@ -1,0 +1,974 @@
+/*
+ * The daybook's drawing module: the day list and the notebook flush review,
+ * drawn the same way everywhere they show up.
+ *
+ * Three hosts load it. A Claude Code widget (visualize's show_widget) loads it
+ * from jsDelivr at a pinned commit or tag. The site's MCP Apps view, which
+ * Claude chat draws, carries a generated copy inline, because that host fetches
+ * nothing. fixture.html beside this file draws every state from invented data,
+ * so a change can be checked in a browser before it ships.
+ *
+ * The day list runs in one of two modes. In `message` mode a press marks its
+ * row and adds to the footer count, and the apply pill sends every change in
+ * one message, since each message costs a model turn in Claude Code. In `call`
+ * mode a press goes to the server at once through the host's tool call, and
+ * the list reloads.
+ *
+ * Load order does not matter. A page queues work before or after this runs:
+ *
+ *   (window.DAYBOOK = window.DAYBOOK || []).push(["list", "mount-id", data, opts]);
+ *
+ * The view inlines this file inside a script element, so it stays ASCII and
+ * never contains a closing script tag or an HTML comment opener.
+ * apps/web/scripts/daybook-ui.ts checks all three before it copies the file.
+ */
+(function () {
+  "use strict";
+
+  const VERSION = "0.3.0";
+  if (window.Daybook) {
+    window.Daybook.drain();
+    return;
+  }
+
+  const PAGE = "https://austendewolf.com/daybook";
+  const PT = "America/Los_Angeles";
+  const CAP = 3;
+  const CONFLICT = "That item changed somewhere else. The list below is current.";
+  const DOT = "\u00b7";
+  const OUT = "\u2197";
+  const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+  // Tabler outline icons, 3.34.1. Inline, because the site's view loads no font.
+  const PATHS = {
+    arrow: ["M5 12l14 0", "M13 18l6 -6", "M13 6l6 6"],
+    x: ["M18 6l-12 12", "M6 6l12 12"],
+    minus: ["M5 12l14 0"],
+    check: ["M5 12l5 5l10 -10"],
+    pencil: ["M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4", "M13.5 6.5l4 4"],
+    bolt: ["M13 3l0 7l6 0l-8 11l0 -7l-6 0l8 -11"],
+    gavel: [
+      "M13 10l7.383 7.418c.823 .82 .823 2.148 0 2.967a2.11 2.11 0 0 1 -2.976 0l-7.407 -7.385",
+      "M6 9l4 4",
+      "M13 10l-4 -4",
+      "M3 21h7",
+      "M6.793 15.793l-3.586 -3.586a1 1 0 0 1 0 -1.414l2.293 -2.293l.5 .5l3 -3l-.5 -.5l2.293 -2.293a1 1 0 0 1 1.414 0l3.586 3.586a1 1 0 0 1 0 1.414l-2.293 2.293l-.5 -.5l-3 3l.5 .5l-2.293 2.293a1 1 0 0 1 -1.414 0z",
+    ],
+  };
+
+  const LIST_LEGEND = [["open", "dot", "open"], ["later", "arrow", "later"], ["done", "x", "done"], ["drop", "minus", "dropped"]];
+  const LIST_MARK = { open: "dot", later: "arrow", done: "x", drop: "minus" };
+  const LIST_SAY = { open: "open", later: "later", done: "done", drop: "dropped" };
+  const COUNT_WORDS = [["done", "done"], ["later", "to later"], ["today", "to today"], ["drop", "dropped"]];
+
+  const FLUSH_LEGEND = [["new", "dot", "new"], ["edit", "pencil", "edit"], ["note", "bolt", "note"], ["decision", "gavel", "decision"], ["done", "x", "done"]];
+  const FLUSH_MARK = { new: "dot", edit: "pencil", note: "bolt", decision: "gavel", done: "x" };
+  const KINDS = ["new", "edit", "note", "decision", "done"];
+  const AS_WORDS = { new: "an action", edit: "an action", note: "a note", decision: "a decision" };
+  const ACT = (k) => k === "new" || k === "edit";
+
+  // Controls are spans with a role: the widget host restyles <button> with its
+  // own border and text color. Sizes stay at 11px and up, and weights at 400
+  // and 500, which is what that host allows.
+  const CSS = `
+.db{container:db/inline-size;
+--green-shade:light-dark(#27a570,#30cf8c);--amber:#cf8c30;--blue:light-dark(#2f78d0,#5ea3ee);
+--edge:light-dark(rgba(0,0,0,.11),rgba(255,255,255,.09));--ink:light-dark(#1c1c1c,#f8f8f8);
+--muted:light-dark(#646464,#8f8f8f);--na:light-dark(#9c9c9c,#666666);
+--surface:light-dark(#ffffff,#232323);--on-fill:light-dark(#ffffff,#141414);
+--gap:light-dark(color-mix(in srgb,#cf8c30 80%,#000),color-mix(in srgb,#cf8c30 78%,#fff));
+--mono:var(--font-mono,ui-monospace,SFMono-Regular,Menlo,monospace);
+position:relative;color:var(--ink);font-size:13px;line-height:1.5}
+.db [role=button],.db [role=checkbox],.db [role=menuitemradio]{cursor:pointer;user-select:none;-webkit-user-select:none;outline:none}
+.db .ic{display:inline-block;flex:none;width:1em;height:1em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.db .dot{display:inline-block;flex:none;border-radius:50%;background:currentColor}
+.db .head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}
+.db .head b{font-size:15px;font-weight:500}
+.db .head .date{font-family:var(--mono);font-size:12px;color:var(--green-shade)}
+.db .legend{margin-left:auto;display:flex;flex-wrap:wrap;gap:4px 12px;font-family:var(--mono);font-size:11px}
+.db .legend .ic{width:14px;height:14px;vertical-align:-2px;margin-right:3px}
+.db .legend .dot{width:6px;height:6px;margin:0 6px 0 3px;vertical-align:1px}
+.db .hint{font-family:var(--mono);font-size:11px;color:var(--na);margin-top:2px}
+.db .banner{margin:12px 0 0;padding:6px 12px;border-left:2px solid var(--gap);background:color-mix(in srgb,var(--amber) 12%,transparent)}
+.db .loading{color:var(--muted)}
+.db .sect{font-family:var(--mono);font-weight:500;font-size:11px;letter-spacing:1.3px;text-transform:uppercase;color:var(--green-shade);margin:18px 0 6px;display:flex;align-items:baseline;gap:8px}
+.db .sect::before{content:'\\00b7'}
+.db .sect .n{color:var(--na);letter-spacing:.4px}
+.db .sect .n.ok{color:var(--green-shade)}
+.db .sect .n.gap{color:var(--gap)}
+.db .sect .pill{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:400}
+.db .rows{border-top:1px solid var(--edge)}
+.db .rows[hidden],.db .menu[hidden]{display:none}
+.db .row{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:2px 10px;align-items:start;padding:9px 0;border-bottom:1px solid var(--edge)}
+.db .row>div{transition:opacity 160ms ease}
+.db .row.faded>div:not(:last-child){opacity:.35}
+.db .row.busy>div{opacity:.45}
+.db .empty{padding:10px 0;border-bottom:1px solid var(--edge);color:var(--muted)}
+.db .mark{box-sizing:border-box;width:28px;height:28px;margin-top:-4px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:color-mix(in srgb,currentColor 11%,transparent)}
+.db .mark[role=button]{transition:background 120ms ease}
+.db .mark[role=button]:hover,.db .mark[role=button]:focus-visible,.db .mark[aria-expanded="true"]{background:color-mix(in srgb,currentColor 22%,transparent)}
+.db .mark[aria-disabled="true"]:hover{background:color-mix(in srgb,currentColor 11%,transparent);cursor:default}
+.db .mark .ic{width:17px;height:17px}
+.db .mark .dot{width:8px;height:8px}
+.db .k-open,.db .k-new{color:var(--green-shade)}
+.db .k-later,.db .k-edit{color:var(--blue)}
+.db .k-note,.db .k-decision{color:var(--amber)}
+.db .k-done,.db .k-drop{color:var(--na)}
+.db .t{font-size:13.5px;line-height:19px;overflow-wrap:anywhere}
+.db .row.struck .t{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--na)}
+.db .row.aside .t{font-style:italic}
+.db .t[contenteditable]{outline:none;border-radius:4px}
+.db .t[contenteditable="true"]:focus{background:color-mix(in srgb,var(--green-shade) 10%,transparent)}
+.db .t ins{text-decoration:none;background:color-mix(in srgb,var(--blue) 16%,transparent);border-radius:3px;padding:0 2px;margin:0 -1px}
+.db .was{margin-top:5px;padding-left:8px;border-left:2px solid color-mix(in srgb,var(--blue) 45%,transparent);font-size:12px;color:var(--muted)}
+.db .was span{font-family:var(--mono);font-size:11px;letter-spacing:.4px;text-transform:uppercase;color:var(--blue);margin-right:6px}
+.db .m{color:var(--na);font-size:12px;margin-top:3px}
+.db .m .due{color:var(--muted)}
+.db .m .due.near{color:var(--amber)}
+.db .m .due.over{color:var(--gap);font-weight:500}
+.db .m .flag{color:var(--gap);font-weight:500}
+.db .m a,.db .foot a{color:var(--na);text-underline-offset:2px}
+.db .m a:hover,.db .foot a:hover{color:var(--green-shade)}
+.db .acts{display:flex;gap:6px}
+.db .pill{--c:var(--muted);display:inline-block;box-sizing:border-box;padding:1px 11px;border:1px solid var(--c);border-radius:999px;background:transparent;color:var(--c);font-family:var(--mono);font-size:11px;line-height:17px;white-space:nowrap;text-align:center;transition:background 120ms ease,color 120ms ease}
+.db .pill.go{--c:var(--green-shade)}
+.db .pill:hover,.db .pill:focus-visible{background:color-mix(in srgb,var(--c) 12%,transparent)}
+.db .pill[aria-disabled="true"]{opacity:.4;cursor:default}
+.db .pill[aria-disabled="true"]:hover{background:transparent}
+.db .cb{box-sizing:border-box;width:20px;height:20px;display:flex;align-items:center;justify-content:center;border:1.5px solid var(--na);border-radius:4px;color:var(--green-shade);transition:border-color 120ms ease}
+.db .cb .ic{width:15px;height:15px;visibility:hidden}
+.db .cb[aria-checked="true"]{border-color:var(--green-shade)}
+.db .cb[aria-checked="true"] .ic{visibility:visible}
+.db .cb:hover,.db .cb:focus-visible{background:color-mix(in srgb,var(--green-shade) 10%,transparent)}
+.db .cb[aria-disabled="true"]{cursor:default}
+.db .cb[aria-disabled="true"]:hover{background:transparent}
+.db .menu{position:absolute;z-index:10;min-width:136px;padding:4px;background:var(--surface);border:1px solid var(--edge);border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.14)}
+.db .menu [role=menuitemradio]{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;font-family:var(--mono);font-size:12px}
+.db .menu .ic{width:16px;height:16px}
+.db .menu .dot{width:7px;height:7px;margin:0 4.5px}
+.db .menu [role=menuitemradio]:hover,.db .menu [role=menuitemradio]:focus-visible{background:color-mix(in srgb,currentColor 12%,transparent)}
+.db .menu [aria-checked="true"]{font-weight:500}
+.db .menu [aria-checked="true"]::after{content:'\\2713';margin-left:auto;font-size:11px}
+.db .menu .ready{margin-left:auto;font-size:11px;color:var(--na)}
+.db .foot{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:8px 12px;margin-top:14px;font-family:var(--mono);font-size:11px}
+.db .foot .notes{margin-right:auto}
+.db .foot .count{color:var(--na)}
+.db .foot .apply{--c:var(--green-shade);padding:3px 14px;font-size:12px;background:var(--c);color:var(--on-fill)}
+.db .foot .apply:hover,.db .foot .apply:focus-visible{background:color-mix(in srgb,var(--c) 85%,#000)}
+.db .foot .apply[aria-disabled="true"]:hover{background:var(--c)}
+@container db (max-width:440px){.db .row.li{grid-template-columns:28px minmax(0,1fr)}.db .row.li .acts{grid-column:2;margin-top:6px}}
+@media (prefers-reduced-motion:reduce){.db *{transition:none!important}}
+`;
+
+  // ---- text ---------------------------------------------------------------
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  }
+  const norm = (s) => String(s).trim().replace(/\s+/g, " ");
+  const pad = (n) => (n < 10 ? "0" : "") + n;
+  const msgOf = (err) => (err && err.message ? err.message : String(err));
+
+  function safeUrl(u) {
+    const s = typeof u === "string" ? u.trim() : "";
+    return /^https?:\/\//i.test(s) ? s : "";
+  }
+
+  // "first.last@hover.to" reads as "First Last". A plain name shows as is.
+  function personName(p) {
+    return String(p)
+      .split(/\s*[,;]\s*/)
+      .filter(Boolean)
+      .map((one) => {
+        const at = one.indexOf("@");
+        if (at < 0) return one;
+        return one
+          .slice(0, at)
+          .split(/[._]+/)
+          .filter(Boolean)
+          .map((w) => w.split("-").map((x) => x.charAt(0).toUpperCase() + x.slice(1)).join("-"))
+          .join(" ");
+      })
+      .join(", ");
+  }
+
+  function linkLabel(u) {
+    let url;
+    try {
+      url = new URL(u);
+    } catch (err) {
+      return "link";
+    }
+    const h = url.hostname.replace(/^www\./, "");
+    const p = url.pathname;
+    if (h === "docs.google.com") {
+      if (/^\/spreadsheets\//.test(p)) return "sheet";
+      if (/^\/forms\//.test(p)) return "form";
+      if (/^\/presentation\//.test(p)) return "slides";
+      return "doc";
+    }
+    if (h === "drive.google.com") return "doc";
+    if (/(^|\.)slack\.com$/.test(h)) return "Slack";
+    if (/(^|\.)atlassian\.net$/.test(h)) {
+      const m = p.match(/\/browse\/([A-Z][A-Z0-9]*-\d+)/);
+      return m ? m[1] : "Jira";
+    }
+    if (h === "github.com") return "GitHub";
+    if (h === "claude.ai" && /\/artifact/.test(p)) return "artifact";
+    if (h === "mail.google.com") return "mail";
+    if (h === "calendar.google.com") return "event";
+    return h;
+  }
+
+  // A comment id or a file id in the source says nothing to a reader.
+  function isIdLike(w) {
+    return /^[A-Za-z0-9_-]{10,}$/.test(w) && /[a-z]/.test(w) && (w.match(/[A-Z]/g) || []).length >= 4;
+  }
+
+  function clip(s, n) {
+    if (s.length <= n) return s;
+    const cut = s.slice(0, n + 1);
+    const sp = cut.lastIndexOf(" ");
+    return (sp > n / 2 ? cut.slice(0, sp) : s.slice(0, n)).replace(/[\s,.;:]+$/, "") + "\u2026";
+  }
+
+  // Where an item came from, shortened for the meta line: the first clause of
+  // the source with its date. His own notes to himself say nothing, and a
+  // source that only repeats the link's label is dropped.
+  function origin(src, label) {
+    const s = String(src || "").trim();
+    if (!s || /^austen\b/i.test(s)) return "";
+    let head = s.split(/[;,]|\.\s/)[0].trim();
+    head = head
+      .split(/\s+/)
+      .filter((w) => !isIdLike(w))
+      .join(" ")
+      .replace(/\s+(?:and|&|\+)$/i, "")
+      .replace(/^Notebook\b/, "notebook");
+    head = clip(head, 32);
+    const date = s.match(/\b\d{2}\/\d{2}\b/);
+    if (date && head.indexOf(date[0]) < 0) head = (head ? head + " " : "") + date[0];
+    if (!head || (label && head.toLowerCase() === String(label).toLowerCase())) return "";
+    return head;
+  }
+
+  // ---- dates, all in Pacific time ------------------------------------------
+
+  let ptFormat = null;
+  function ptParts(ms) {
+    ptFormat =
+      ptFormat ||
+      new Intl.DateTimeFormat("en-US", { timeZone: PT, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    const p = {};
+    ptFormat.formatToParts(new Date(ms)).forEach((x) => {
+      p[x.type] = x.value;
+    });
+    return { y: +p.year, mo: +p.month, d: +p.day, h: +p.hour % 24, mi: +p.minute };
+  }
+  const isoDay = (p) => p.y + "-" + pad(p.mo) + "-" + pad(p.d);
+  const todayPT = () => isoDay(ptParts(Date.now()));
+  const validDay = (s) => (typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "");
+  const daysBetween = (a, b) => Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 864e5);
+  const clock = (h, mi) => (h % 12 || 12) + ":" + pad(mi) + (h < 12 ? "am" : "pm");
+
+  // A wall-clock time in Pacific time, as an instant.
+  function ptWall(y, mo, d, h, mi) {
+    const guess = Date.UTC(y, mo - 1, d, h, mi);
+    const p = ptParts(guess);
+    return guess + (guess - Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi));
+  }
+
+  function dayTitle(day) {
+    return WEEKDAYS[new Date(day + "T12:00:00Z").getUTCDay()] + " " + day.slice(5, 7) + "/" + day.slice(8, 10);
+  }
+
+  // "due Friday, October 2, 2026 (in 2 days)", amber inside two days and the
+  // gap color once past. A time reads as Pacific: "2026-10-05T13:30".
+  function dueText(value, today) {
+    const s = String(value);
+    let m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/);
+    if (!m) return '<span class="due">due ' + esc(s) + "</span>";
+    let at = null;
+    let hh = m[4] == null ? null : +m[4];
+    let mm = m[5] == null ? null : +m[5];
+    let day = m[1] + "-" + m[2] + "-" + m[3];
+    if (hh != null && /(?:Z|[+-]\d{2}:?\d{2})$/i.test(s) && !isNaN(Date.parse(s))) {
+      at = Date.parse(s);
+      const p = ptParts(at);
+      day = isoDay(p);
+      hh = p.h;
+      mm = p.mi;
+    } else if (hh != null) {
+      at = ptWall(+m[1], +m[2], +m[3], hh, mm);
+    }
+    const n = daysBetween(today || todayPT(), day);
+    const full = new Date(day + "T12:00:00Z").toLocaleDateString("en-US", { timeZone: "UTC", weekday: "long", month: "long", day: "numeric", year: "numeric" });
+    let cls = n < 0 ? "over" : n <= 1 ? "near" : "";
+    let rel = "";
+    if (at != null) {
+      const hours = Math.round((at - Date.now()) / 36e5);
+      if (Math.abs(hours) < 24) rel = hours === 0 ? "now" : hours > 0 ? "in " + hours + (hours === 1 ? " hour" : " hours") : -hours + (hours === -1 ? " hour ago" : " hours ago");
+      if (at < Date.now()) cls = "over";
+    }
+    if (!rel) {
+      rel =
+        n === 0 ? "today"
+        : n === 1 ? "tomorrow"
+        : n === -1 ? "yesterday"
+        : n > 0 ? (n >= 14 ? "in " + Math.round(n / 7) + " weeks" : "in " + n + " days")
+        : -n >= 14 ? Math.round(-n / 7) + " weeks ago"
+        : -n + " days ago";
+    }
+    const time = hh != null ? " " + clock(hh, mm) + " PT" : "";
+    return '<span class="due' + (cls ? " " + cls : "") + '">due ' + full + time + " (" + rel + ")</span>";
+  }
+
+  // ---- shared pieces --------------------------------------------------------
+
+  function icon(name) {
+    if (name === "dot") return '<i class="dot" aria-hidden="true"></i>';
+    return (
+      '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+      PATHS[name].map((d) => '<path d="' + d + '"/>').join("") +
+      "</svg>"
+    );
+  }
+
+  function legend(pairs) {
+    return '<span class="legend">' + pairs.map((p) => '<span class="k-' + p[0] + '">' + icon(p[1]) + p[2] + "</span>").join("") + "</span>";
+  }
+
+  function pill(text, a, id, label, go, off, extra) {
+    return (
+      '<span class="pill' + (go ? " go" : "") + '" role="button" tabindex="0" data-a="' + a + '"' +
+      (id != null && id !== "" ? ' data-id="' + esc(id) + '"' : "") +
+      ' aria-label="' + esc(label) + '" aria-disabled="' + (off ? "true" : "false") + '"' + (extra || "") + ">" +
+      text + "</span>"
+    );
+  }
+
+  function metaLine(it, today) {
+    const label = it.link ? linkLabel(it.link) : "";
+    const from = origin(it.source, label);
+    const parts = [
+      it.priority != null ? "p" + it.priority : "",
+      it.due ? dueText(it.due, today) : "",
+      it.person ? esc(personName(it.person)) : "",
+      from ? esc(from) : "",
+      it.link ? '<a href="' + esc(it.link) + '" target="_blank" rel="noopener">' + esc(label) + " " + OUT + "</a>" : "",
+    ].filter(Boolean);
+    return parts.length ? '<div class="m">' + parts.join(" " + DOT + " ") + "</div>" : "";
+  }
+
+  function mount(where) {
+    const el = typeof where === "string" ? document.getElementById(where) : where;
+    if (!el || typeof el.appendChild !== "function") throw new Error("nothing to draw into at " + where);
+    const root = el.getRootNode ? el.getRootNode() : document;
+    const into = root.nodeType === 11 ? root : document.head || document.documentElement;
+    if (!into.querySelector("style[data-daybook]")) {
+      const s = document.createElement("style");
+      s.setAttribute("data-daybook", VERSION);
+      s.textContent = CSS;
+      into.appendChild(s);
+    }
+    el.textContent = "";
+    const db = document.createElement("div");
+    db.className = "db";
+    el.appendChild(db);
+    return db;
+  }
+
+  // Enter and Space press whatever control has focus, as a click would.
+  function keys(db) {
+    db.addEventListener("keydown", (e) => {
+      const c = e.target.closest && e.target.closest('[role="button"],[role="checkbox"],[role="menuitemradio"]');
+      if (c && (e.key === "Enter" || e.key === " ")) {
+        e.preventDefault();
+        c.click();
+      }
+    });
+  }
+
+  function sender(opts) {
+    if (typeof opts.send === "function") return opts.send;
+    return typeof window.sendPrompt === "function" ? window.sendPrompt : null;
+  }
+
+  // ---- the day list ----------------------------------------------------------
+
+  function normList(x) {
+    x = x || {};
+    const items = (Array.isArray(x.items) ? x.items : [])
+      .filter((i) => i && i.id != null)
+      .map((i) => ({
+        id: String(i.id),
+        title: i.title == null ? "" : String(i.title),
+        horizon: i.horizon === "today" ? "today" : "later",
+        priority: typeof i.priority === "number" ? i.priority : null,
+        due: typeof i.due === "string" && i.due ? i.due : null,
+        person: i.person ? String(i.person) : "",
+        link: safeUrl(i.link),
+        source: i.source ? String(i.source) : "",
+        updated_at: i.updated_at || null,
+      }));
+    return {
+      today: validDay(x.today) || todayPT(),
+      items: items,
+      // An older server sends every item and no flag, which reads as open.
+      laterShown: x.later_shown !== false,
+      laterCount: typeof x.later_count === "number" ? x.later_count : items.filter((i) => i.horizon !== "today").length,
+      notesCount: typeof x.notes_count === "number" ? x.notes_count : 0,
+      writable: x.writable !== false,
+      page: safeUrl(x.page) || PAGE,
+    };
+  }
+
+  function list(where, data, opts) {
+    opts = opts || {};
+    const db = mount(where);
+    const mode = opts.mode === "call" ? "call" : "message";
+    let d = null;
+    let act = {};
+    let busy = {};
+    let sent = false;
+    let folded = false;
+    let expanding = false;
+    let problem = null;
+
+    function set(x) {
+      d = normList(x);
+      const kept = {};
+      d.items.forEach((i) => {
+        if (act[i.id]) kept[i.id] = act[i.id];
+      });
+      act = kept;
+      problem = null;
+    }
+
+    function split() {
+      return {
+        today: d.items.filter((i) => i.horizon === "today"),
+        later: d.laterShown ? d.items.filter((i) => i.horizon !== "today") : [],
+      };
+    }
+
+    function changes() {
+      if (!d) return [];
+      const s = split();
+      return s.today.concat(s.later).filter((i) => act[i.id]).map((i) => act[i.id] + " " + i.id);
+    }
+
+    function countText() {
+      if (sent) return "sent";
+      const c = Object.keys(act).map((k) => act[k]);
+      if (!c.length) return "nothing to apply yet";
+      return COUNT_WORDS.map((w) => {
+        const q = c.filter((x) => x === w[0]).length;
+        return q ? q + " " + w[1] : "";
+      })
+        .filter(Boolean)
+        .join(" " + DOT + " ");
+    }
+
+    function row(it, home) {
+      const a = act[it.id];
+      const m = a === "today" ? "open" : a || (home === "today" ? "open" : "later");
+      const off = sent || !d.writable || !!busy[it.id];
+      let acts;
+      if (a) acts = pill("undo", "undo", it.id, "Undo: " + it.title, false, off);
+      else if (home === "today") acts = pill("later", "later", it.id, "Move to later: " + it.title, false, off) + pill("done", "done", it.id, "Done: " + it.title, true, off);
+      else acts = pill("drop", "drop", it.id, "Drop: " + it.title, false, off) + pill("today", "today", it.id, "Move to today: " + it.title, true, off);
+      const cls = "row li" + (a === "done" ? " struck" : "") + (a === "drop" ? " faded" : "") + (busy[it.id] ? " busy" : "");
+      return (
+        '<div class="' + cls + '" data-id="' + esc(it.id) + '">' +
+        '<div><span class="mark k-' + m + '" role="img" aria-label="' + LIST_SAY[m] + '" title="' + LIST_SAY[m] + '">' + icon(LIST_MARK[m]) + "</span></div>" +
+        '<div><div class="t">' + esc(it.title) + "</div>" + metaLine(it, d.today) + "</div>" +
+        '<div class="acts">' + acts + "</div></div>"
+      );
+    }
+
+    function laterPill(shown) {
+      if (d.laterShown) {
+        if (!shown) return "";
+        return pill(folded ? "show all " + shown : "fold", "fold", "", folded ? "Show later" : "Fold later", false, false, ' aria-expanded="' + !folded + '"');
+      }
+      if (!d.laterCount) return "";
+      if (expanding) return pill("loading", "more", "", "Loading later", false, true);
+      return pill("show all " + d.laterCount + (mode === "message" ? " " + OUT : ""), "more", "", "Show all of later", false, sent);
+    }
+
+    function foot() {
+      const n = d.notesCount;
+      const words = n === 1 ? "1 note or decision stays on the page" : n ? n + " notes and decisions stay on the page" : "open the page";
+      let html = '<div class="foot"><a class="notes" href="' + esc(d.page) + '" target="_blank" rel="noopener">' + words + " " + OUT + "</a>";
+      if (mode === "message") {
+        const off = sent || !changes().length;
+        html +=
+          '<span class="count" aria-live="polite">' + esc(countText()) + "</span>" +
+          '<span class="pill apply" role="button" tabindex="0" data-a="apply" aria-disabled="' + (off ? "true" : "false") + '">apply to daybook ' + OUT + "</span>";
+      }
+      return html + "</div>";
+    }
+
+    function render(focus) {
+      if (!d) {
+        db.innerHTML = problem ? '<div class="banner" role="status">' + esc(problem) + "</div>" : '<div class="loading">Loading the list.</div>';
+        return;
+      }
+      const s = split();
+      const n = s.today.filter((i) => !act[i.id]).length + s.later.filter((i) => act[i.id] === "today").length;
+      let html = '<div class="head"><b>Daybook</b><span class="date">' + esc(dayTitle(d.today)) + "</span>" + legend(LIST_LEGEND) + "</div>";
+      if (mode === "message") html += '<div class="hint">presses collect here, and apply sends them in one message</div>';
+      if (problem) html += '<div class="banner" role="status">' + esc(problem) + "</div>";
+      if (!d.writable) html += '<div class="banner">The server is read-only right now, so the buttons are off.</div>';
+      html += '<div class="sect">Today<span class="n' + (n === CAP ? " ok" : n > CAP ? " gap" : "") + '">' + n + " of " + CAP + "</span></div>";
+      html += '<div class="rows">' + (s.today.length ? s.today.map((i) => row(i, "today")).join("") : '<div class="empty">Nothing on today. Pull one up from later.</div>') + "</div>";
+      html += '<div class="sect">Later<span class="n">' + (d.laterShown ? s.later.length : d.laterCount) + "</span>" + laterPill(s.later.length) + "</div>";
+      if (d.laterShown && s.later.length) html += '<div class="rows"' + (folded ? " hidden" : "") + ">" + s.later.map((i) => row(i, "later")).join("") + "</div>";
+      else if (d.laterShown || !d.laterCount) html += '<div class="rows"><div class="empty">Later is empty.</div></div>';
+      html += foot();
+      db.innerHTML = html;
+      if (focus) refocus(focus);
+    }
+
+    function refocus(f) {
+      let el = null;
+      if (f.a) el = db.querySelector('[data-a="' + f.a + '"]');
+      else {
+        const r = Array.from(db.querySelectorAll(".row.li")).find((x) => x.dataset.id === f.id);
+        el = r && r.querySelector('[role="button"]');
+      }
+      if (el) el.focus();
+    }
+
+    function reload() {
+      if (typeof opts.load !== "function") return Promise.resolve();
+      return Promise.resolve(opts.load({ later: d ? d.laterShown : false })).then((x) => {
+        set(x);
+      });
+    }
+
+    function say(text) {
+      const f = sender(opts);
+      if (!f) {
+        problem = "This page cannot send a message, so nothing was applied.";
+        render();
+        return;
+      }
+      sent = true;
+      render();
+      try {
+        f(text);
+      } catch (err) {
+        sent = false;
+        problem = msgOf(err);
+        render();
+      }
+    }
+
+    function press(id, a, kb) {
+      if (mode === "message") {
+        if (sent) return;
+        if (a === "undo") delete act[id];
+        else act[id] = a;
+        render(kb && { id: id });
+        return;
+      }
+      const it = d.items.find((i) => i.id === id);
+      if (!it || busy[id] || !d.writable || typeof opts.call !== "function") return;
+      busy[id] = true;
+      render(kb && { id: id });
+      const stamp = it.updated_at ? { updated_at: it.updated_at } : {};
+      let call;
+      if (a === "done") call = opts.call("daybook_close", Object.assign({ id: id }, stamp));
+      else if (a === "drop") call = opts.call("daybook_close", Object.assign({ id: id, status: "dropped" }, stamp));
+      else call = opts.call("daybook_move", { id: id, horizon: a });
+      Promise.resolve(call)
+        .then(() => reload())
+        .catch((err) => {
+          const message = /updated_at|changed since/i.test(msgOf(err)) ? CONFLICT : msgOf(err);
+          // The reload clears any old problem, so the new one goes on after it.
+          return reload()
+            .catch(() => {})
+            .then(() => {
+              problem = message;
+            });
+        })
+        .catch(() => {})
+        .then(() => {
+          delete busy[id];
+          render();
+        });
+    }
+
+    function showLater(kb) {
+      if (mode === "message") {
+        if (sent) return;
+        const ch = changes();
+        say(ch.length ? "Daybook changes: " + ch.join("; ") + ". Then show later." : "Daybook: show later.");
+        return;
+      }
+      if (typeof opts.load !== "function" || expanding) return;
+      expanding = true;
+      render();
+      Promise.resolve(opts.load({ later: true }))
+        .then((x) => {
+          set(x);
+          folded = false;
+        })
+        .catch((err) => {
+          problem = msgOf(err);
+        })
+        .then(() => {
+          expanding = false;
+          render(kb && { a: d && d.laterShown ? "fold" : "more" });
+        });
+    }
+
+    db.addEventListener("click", (e) => {
+      const link = e.target.closest("a[href]");
+      if (link) {
+        if (typeof opts.openLink === "function") {
+          e.preventDefault();
+          opts.openLink(link.href);
+        }
+        return;
+      }
+      const c = e.target.closest('[role="button"]');
+      if (!c || c.getAttribute("aria-disabled") === "true") return;
+      const kb = e.detail === 0;
+      const a = c.dataset.a;
+      if (a === "fold") {
+        folded = !folded;
+        render(kb && { a: "fold" });
+      } else if (a === "more") showLater(kb);
+      else if (a === "apply") {
+        const ch = changes();
+        if (ch.length && !sent) say("Daybook changes: " + ch.join("; ") + ".");
+      } else if (c.dataset.id != null) press(c.dataset.id, a, kb);
+    });
+    keys(db);
+
+    if (data) set(data);
+    render();
+    return {
+      update(x) {
+        set(x);
+        render();
+      },
+      error(message) {
+        problem = String(message);
+        render();
+      },
+    };
+  }
+
+  // ---- the notebook flush ------------------------------------------------------
+
+  // The words the edit adds, tinted, found by a longest common subsequence
+  // over words.
+  function marked(oldT, newT) {
+    const nw = (w) => w.toLowerCase().replace(/[^\w']/g, "");
+    const a = String(oldT).split(/\s+/);
+    const b = String(newT).split(/\s+/);
+    const L = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+    for (let i = a.length - 1; i >= 0; i--)
+      for (let j = b.length - 1; j >= 0; j--) L[i][j] = nw(a[i]) === nw(b[j]) ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+    const out = [];
+    let run = [];
+    let i = 0;
+    let j = 0;
+    const close = () => {
+      if (run.length) {
+        out.push("<ins>" + run.join(" ") + "</ins>");
+        run = [];
+      }
+    };
+    while (j < b.length) {
+      if (i < a.length && nw(a[i]) === nw(b[j])) {
+        close();
+        out.push(esc(b[j]));
+        i++;
+        j++;
+      } else if (i < a.length && L[i + 1][j] >= L[i][j + 1]) i++;
+      else {
+        run.push(esc(b[j]));
+        j++;
+      }
+    }
+    close();
+    return out.join(" ");
+  }
+
+  function flush(where, data, opts) {
+    opts = opts || {};
+    const db = mount(where);
+    const dates = String((data && data.dates) || "");
+    const today = validDay(data && data.today) || todayPT();
+    const R = data && Array.isArray(data.rows) ? data.rows : [];
+    const rows = [];
+    const state = [];
+    let sent = false;
+    let openBtn = null;
+
+    let html =
+      '<div class="head"><b>Notebook flush</b><span class="date">' + esc(dates) + "</span>" + legend(FLUSH_LEGEND) + "</div>" +
+      '<div class="hint">click an icon to change what a line becomes</div><div class="list">';
+    let open = false;
+    R.forEach((r, ix) => {
+      if (Array.isArray(r)) {
+        let c = 0;
+        for (let q = ix + 1; q < R.length && !Array.isArray(R[q]); q++) c++;
+        html += (open ? "</div>" : "") + '<div class="sect">' + esc(r[0]) + '<span class="n">' + c + '</span></div><div class="rows">';
+        open = true;
+        return;
+      }
+      if (!r || !FLUSH_MARK[r.k]) throw new Error("row " + (r && r.id) + " has no type the flush knows: " + (r && r.k));
+      if (!open) {
+        html += '<div class="rows">';
+        open = true;
+      }
+      const t = r.t == null ? "" : String(r.t);
+      rows.push(r);
+      state.push({ keep: true, k: r.k, t: t, t0: t, p: r.p, due: r.due || null, f: r.f || "" });
+      html += '<div class="row fl" data-ix="' + (rows.length - 1) + '"></div>';
+    });
+    html +=
+      (open ? "</div>" : "") + '</div><div class="menu" role="menu" hidden></div>' +
+      '<div class="foot"><span class="count" aria-live="polite"></span>' +
+      '<span class="pill apply" role="button" tabindex="0" data-a="submit" aria-disabled="false">write to daybook ' + OUT + "</span></div>";
+    db.innerHTML = html;
+
+    const menu = db.querySelector(".menu");
+    const count = db.querySelector(".count");
+    const submit = db.querySelector('[data-a="submit"]');
+    const rowEl = (i) => db.querySelector('.row.fl[data-ix="' + i + '"]');
+
+    function version(r, k) {
+      if (k === r.k) return { t: r.t, due: r.due, p: r.p, f: r.f };
+      const a = r.as && r.as[k];
+      if (!a) return null;
+      return typeof a === "string" ? { t: a } : a;
+    }
+    const kinds = (r) => KINDS.filter((k) => k !== "edit" || r.old);
+
+    function inner(i) {
+      const r = rows[i];
+      const s = state[i];
+      const evidence = safeUrl(r.l);
+      const meta = [
+        ACT(s.k) && s.p != null ? "p" + s.p : "",
+        ACT(s.k) ? (s.due ? dueText(s.due, today) : "no due date") : "",
+        r.m ? esc(r.m) : "",
+        s.f ? '<span class="flag">' + esc(s.f) + "</span>" : "",
+        evidence ? '<a href="' + esc(evidence) + '" target="_blank" rel="noopener">evidence ' + OUT + "</a>" : "",
+      ]
+        .filter(Boolean)
+        .join(" " + DOT + " ");
+      const isEdit = s.k === "edit" && r.old;
+      const off = sent ? ' aria-disabled="true"' : "";
+      return (
+        '<div><span class="mark k-' + s.k + '" role="button" tabindex="0" data-ix="' + i + '" aria-haspopup="menu" aria-expanded="false" title="' + s.k + ', click to change" aria-label="' + s.k + ', change type"' + off + ">" + icon(FLUSH_MARK[s.k]) + "</span></div>" +
+        '<div><div class="t" contenteditable="' + (sent ? "false" : "true") + '" spellcheck="false" data-ix="' + i + '">' + (isEdit ? marked(r.old, s.t) : esc(s.t)) + "</div>" +
+        (isEdit ? '<div class="was"><span>previously read</span>' + esc(r.old) + "</div>" : "") +
+        '<div class="m">' + meta + "</div></div>" +
+        '<div><span class="cb" role="checkbox" tabindex="0" data-ix="' + i + '" aria-checked="' + s.keep + '" title="' + (s.keep ? "goes in, click to leave out" : "left out, click to include") + '" aria-label="write this line to the Daybook"' + off + ">" + icon("check") + "</span></div>"
+      );
+    }
+
+    function draw(i) {
+      const s = state[i];
+      const el = rowEl(i);
+      el.className = "row fl" + (s.k === "done" ? " struck" : "") + (s.k === "note" || s.k === "decision" ? " aside" : "") + (s.keep ? "" : " faded");
+      el.innerHTML = inner(i);
+    }
+
+    function retype(i, k) {
+      const r = rows[i];
+      const s = state[i];
+      if (k === s.k) return;
+      const v = version(r, k);
+      if (v) {
+        if (v.t != null) s.t = String(v.t);
+        s.p = v.p != null ? v.p : r.p;
+        s.due = v.due !== undefined ? v.due : ACT(k) && ACT(r.k) ? r.due : null;
+        s.f = v.f || "";
+      } else {
+        if (!ACT(s.k) || !ACT(k)) s.due = null;
+        s.f = k === "done" || (ACT(k) && ACT(s.k)) ? "" : "reword this as " + AS_WORDS[k] + " before it lands";
+      }
+      s.k = k;
+      draw(i);
+    }
+
+    function tally() {
+      if (sent) {
+        count.textContent = "sent";
+        return;
+      }
+      const n = state.filter((s) => s.keep).length;
+      const rt = state.filter((s, i) => s.k !== rows[i].k).length;
+      count.textContent = n + " going in " + DOT + " " + (state.length - n) + " left out" + (rt ? " " + DOT + " " + rt + " retyped" : "");
+    }
+
+    function closeMenu() {
+      menu.hidden = true;
+      if (openBtn) openBtn.setAttribute("aria-expanded", "false");
+      openBtn = null;
+    }
+
+    function openMenu(btn, kb) {
+      const i = +btn.dataset.ix;
+      const r = rows[i];
+      const s = state[i];
+      menu.innerHTML = kinds(r)
+        .map(
+          (k) =>
+            '<div role="menuitemradio" tabindex="0" aria-checked="' + (k === s.k) + '" class="k-' + k + '" data-ix="' + i + '" data-k="' + k + '">' +
+            icon(FLUSH_MARK[k]) + k + (k !== s.k && version(r, k) ? '<span class="ready">reworded</span>' : "") + "</div>"
+        )
+        .join("");
+      const b = btn.getBoundingClientRect();
+      const box = db.getBoundingClientRect();
+      menu.hidden = false;
+      menu.style.left = b.left - box.left + "px";
+      let top = b.bottom - box.top + 4;
+      if (b.bottom + 4 + menu.offsetHeight > box.bottom) top = Math.max(0, b.top - box.top - 4 - menu.offsetHeight);
+      menu.style.top = top + "px";
+      btn.setAttribute("aria-expanded", "true");
+      openBtn = btn;
+      if (kb) {
+        const cur = menu.querySelector('[aria-checked="true"]') || menu.firstElementChild;
+        if (cur) cur.focus();
+      }
+    }
+
+    function focusIn(i, sel) {
+      const el = rowEl(i);
+      const x = el && el.querySelector(sel);
+      if (x) x.focus();
+    }
+
+    function send() {
+      const f = sender(opts);
+      if (!f || sent) return;
+      const dropped = [];
+      const changed = [];
+      rows.forEach((r, i) => {
+        const s = state[i];
+        if (!s.keep) {
+          dropped.push(r.id);
+          return;
+        }
+        const typed = s.k !== r.k;
+        const worded = norm(s.t) !== norm(s.t0);
+        if (!typed && !worded) return;
+        const tag = typed ? " (" + r.k + " to " + s.k + (ACT(s.k) ? (s.p != null ? ", p" + s.p : "") + (s.due ? ", due " + s.due : ", no due") : "") + ")" : "";
+        changed.push(r.id + tag + ": " + norm(s.t));
+      });
+      sent = true;
+      closeMenu();
+      for (let i = 0; i < rows.length; i++) draw(i);
+      tally();
+      submit.setAttribute("aria-disabled", "true");
+      f("Notebook flush confirmed for " + dates + ". Dropped: " + (dropped.join(", ") || "none") + ". Changed: " + (changed.join(" | ") || "none") + ". Keep everything else as proposed.");
+    }
+
+    db.addEventListener("input", (e) => {
+      const t = e.target.closest && e.target.closest(".t[data-ix]");
+      if (t) state[+t.dataset.ix].t = t.textContent;
+    });
+    db.addEventListener("click", (e) => {
+      const link = e.target.closest("a[href]");
+      if (link) {
+        if (typeof opts.openLink === "function") {
+          e.preventDefault();
+          opts.openLink(link.href);
+        }
+        return;
+      }
+      if (sent) return;
+      const kb = e.detail === 0;
+      const btn = e.target.closest(".mark[role=button]");
+      if (btn) {
+        e.stopPropagation();
+        if (openBtn === btn) closeMenu();
+        else {
+          closeMenu();
+          openMenu(btn, kb);
+        }
+        return;
+      }
+      const o = e.target.closest("[data-k]");
+      if (o) {
+        e.stopPropagation();
+        const i = +o.dataset.ix;
+        closeMenu();
+        retype(i, o.dataset.k);
+        tally();
+        if (kb) focusIn(i, ".mark");
+        return;
+      }
+      const cb = e.target.closest(".cb");
+      if (cb) {
+        const i = +cb.dataset.ix;
+        state[i].keep = !state[i].keep;
+        draw(i);
+        tally();
+        if (kb) focusIn(i, ".cb");
+        return;
+      }
+      if (e.target.closest('[data-a="submit"]')) send();
+    });
+    document.addEventListener("click", (e) => {
+      if (!menu.hidden && !menu.contains(e.target)) closeMenu();
+    });
+    db.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !menu.hidden) {
+        const b = openBtn;
+        closeMenu();
+        if (b) b.focus();
+      }
+    });
+    keys(db);
+
+    for (let i = 0; i < rows.length; i++) draw(i);
+    tally();
+    return {};
+  }
+
+  // ---- the queue --------------------------------------------------------------
+
+  function run(job) {
+    if (!Array.isArray(job)) return;
+    try {
+      const entry = job[0] === "flush" ? flush : job[0] === "list" ? list : null;
+      if (!entry) throw new Error("no entry point called " + job[0]);
+      entry(job[1], job[2], job[3]);
+    } catch (err) {
+      const el = typeof job[1] === "string" ? document.getElementById(job[1]) : job[1];
+      if (el && "textContent" in el) el.textContent = "The daybook could not draw: " + msgOf(err);
+      if (window.console) console.error(err);
+    }
+  }
+
+  function drain() {
+    const q = window.DAYBOOK;
+    window.DAYBOOK = {
+      push: function () {
+        for (let i = 0; i < arguments.length; i++) run(arguments[i]);
+        return 0;
+      },
+    };
+    if (Array.isArray(q)) q.forEach(run);
+  }
+
+  window.Daybook = {
+    version: VERSION,
+    list: list,
+    flush: flush,
+    drain: drain,
+    text: { dueText: dueText, linkLabel: linkLabel, origin: origin, personName: personName, todayPT: todayPT },
+  };
+  drain();
+})();
