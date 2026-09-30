@@ -10,6 +10,8 @@ The daily list lives in one place that austendewolf.com owns. The page, the morn
 
 The list lives in one store. The `daybook` schema is live on the site's database, the four tools answer on the gateway, and the page renders at `/daybook` behind the owner gate. The claude.ai artifact was seeded across on 09/21/2026 and is no longer written; it stays readable for a week and then gets deleted.
 
+The day list draws inside Claude from one module, `plugins/daybook/ui/daybook.js`. Claude chat draws the gateway's MCP Apps view through `daybook_show`, with the module inlined, and each press there applies at once. The desktop Code tab cannot draw that view, so the plugin's `day-list` skill calls `daybook_widget`, which returns a page that loads the module from jsDelivr at the deployed commit. Presses there collect into one message, and the skill applies it. The notebook flush draws from the same module, pinned by a git tag. `docs/daybook-in-claude.md` has the reasoning.
+
 `digest_item` in `~/team-scorecard/scorecard.db` keeps only the kinds the store does not own, and `digest_observation` stays there for the scorecard trends.
 
 ## Target

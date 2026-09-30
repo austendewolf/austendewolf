@@ -124,7 +124,7 @@
           it.updated_at = "2026-02-02T00:00:00Z";
         }
         if (name === "daybook_close") {
-          if (args.updated_at && args.updated_at !== it.updated_at) throw new Error("updated_at does not match; the item changed since it was read");
+          if (args.updated_at && args.updated_at !== it.updated_at) throw new Error("conflict: " + it.id + " is now at " + it.updated_at + ". Read again and redo the write.");
           store = store.filter(function (i) { return i !== it; });
           return { closed: it.id };
         }

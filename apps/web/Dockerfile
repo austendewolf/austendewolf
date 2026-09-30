@@ -33,6 +33,9 @@ COPY apps/web ./apps/web
 # sources have to be present or the imports dangle at build time.
 COPY packages/auth ./packages/auth
 COPY packages/db ./packages/db
+# The daybook's drawing module. The build checks that the MCP view's inline
+# copy of it, generated into apps/web, has not drifted from this file.
+COPY plugins/daybook/ui ./plugins/daybook/ui
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ARG NEXT_PUBLIC_SUPABASE_URL

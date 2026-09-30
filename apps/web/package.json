@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "tsx scripts/daybook-ui.ts --check && next build",
     "start": "next start",
     "lint": "eslint",
-    "migrate": "tsx scripts/migrate.ts"
+    "migrate": "tsx scripts/migrate.ts",
+    "daybook-ui": "tsx scripts/daybook-ui.ts"
   },
   "dependencies": {
     "@awd/auth": "workspace:*",

@@ -1,11 +1,14 @@
 # daybook
 
 A photograph of a handwritten page goes in, and a short list of actions comes
-out. The plugin carries one skill, `notebook`, which reads the marks on the
-page, rewrites each line as something you could start, checks it against the
-list you already have, and writes only what you approve. Your open Google Tasks
-come in with the page, including anything someone assigned you in a Doc or a
-Chat space.
+out. The `notebook` skill reads the marks on the page, rewrites each line as
+something you could start, checks it against the list you already have, and
+writes only what you approve. Your open Google Tasks come in with the page,
+including anything someone assigned you in a Doc or a Chat space.
+
+The `day-list` skill draws that list in Claude Code, with done, later, today
+and drop on each row. Presses collect until you apply them, and then go out as
+one message, since every message costs a model turn.
 
 ## Why it exists
 
@@ -29,22 +32,27 @@ relax them by feel.
     claude plugin marketplace add austendewolf/austendewolf
     claude plugin install daybook@austendewolf
 
-Then send a photo of a page, or say "flush my notebook".
+Then send a photo of a page, say "flush my notebook", or ask for your list.
 
 ## What it needs
 
-The skill reads and writes through five tools that your own MCP server
-provides: `daybook_list`, `daybook_find_trigger`, `daybook_upsert`,
-`daybook_close` and `daybook_set_day`. This plugin ships no server, no
-endpoint and no credentials, so point those tool names at whatever store you
-keep. Mine lives on austendewolf.com behind its own authentication.
+The skills read and write through tools that your own MCP server provides:
+`daybook_list`, `daybook_find_trigger`, `daybook_upsert`, `daybook_close`,
+`daybook_move` and `daybook_set_day`, plus `daybook_widget`, which returns the
+day list as a page for the widget. This plugin ships no server, no endpoint and
+no credentials, so point those tool names at whatever store you keep. Mine
+lives on austendewolf.com behind its own authentication.
 
 Google Tasks comes in through `tasks_list_tasklists` and `tasks_list`. The
 Tasks API leaves out anything assigned to you in a Doc or a Chat space unless
 the list call sets `showAssigned`, so your server has to set it.
 
-The confirmation step renders `skills/notebook/widget.html` through a widget
-tool. Without one, the same proposal reads fine as a table in the transcript.
+Both skills draw through visualize's `show_widget`, and both widgets load one
+module, `ui/daybook.js`, from jsDelivr: the day list at the commit its server
+names, and the flush at a git tag. `ui/fixture.html` draws every state from
+invented data, so a change to the look can be checked in a browser first.
+Without a widget tool, the flush proposal reads fine as a table in the
+transcript.
 
 ## What it does not do
 

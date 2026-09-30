@@ -35,6 +35,78 @@ function requireWrites(tool: string): void {
 const date = { type: "string", description: "YYYY-MM-DD, Pacific" };
 const ids = { type: "array", items: { type: "string" } };
 
+/**
+ * What the day list draws. Notes and recorded decisions never become tasks, so
+ * they stay on the page and the list only counts them. A decision with a
+ * priority is still something to decide, and it stays.
+ */
+async function dayList(showLater: boolean) {
+  const open = await listItems();
+  const actions = open.filter((i) => i.kind !== "note" && !(i.kind === "decision" && i.priority === null));
+  const today = actions.filter((i) => i.horizon === "today");
+  return {
+    today: todayPT(),
+    writable: WRITES_ALLOWED,
+    later_shown: showLater,
+    later_count: actions.length - today.length,
+    notes_count: open.length - actions.length,
+    items: showLater ? actions : today,
+  };
+}
+
+/** JSON that can sit inside a script element: nothing in it closes the tag or ends a line. */
+const scriptJson = (value: unknown) =>
+  JSON.stringify(value).replace(/[<\u2028\u2029]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+
+/**
+ * The day list as a page for visualize's show_widget, which is how Claude Code
+ * draws it: that host cannot draw this server's MCP Apps view. The module loads
+ * from jsDelivr at the commit this server was deployed from, so the widget and
+ * the view's inline copy are always the same file.
+ */
+async function widgetPage(showLater: boolean) {
+  const data = await dayList(showLater);
+  const items = data.items.map(({ id, title, horizon, priority, due, person, link, source }) => ({
+    id,
+    title,
+    horizon,
+    priority,
+    due,
+    person,
+    link,
+    source,
+  }));
+  const mount = `daybook-${Math.random().toString(36).slice(2, 8)}`;
+  const commit = process.env.RAILWAY_GIT_COMMIT_SHA ?? "main";
+  const src = `https://cdn.jsdelivr.net/gh/austendewolf/austendewolf@${commit}/plugins/daybook/ui/daybook.js`;
+  const onToday = items.filter((i) => i.horizon === "today").length;
+  const job = `(window.DAYBOOK=window.DAYBOOK||[]).push(["list","${mount}",${scriptJson({ ...data, items })},{"mode":"message"}]);`;
+  // A module the host blocks or never fetches would otherwise leave the widget blank.
+  const fallback = `setTimeout(function(){var e=document.getElementById("${mount}");if(e&&!window.Daybook)e.textContent="The day list did not draw, because its module never arrived from jsDelivr."},10000);`;
+  return [
+    `<h2 class="sr-only">Daybook day list: ${onToday} on today and ${data.later_count} on later, with done, later, today and drop controls that collect until apply sends them in one message.</h2>`,
+    `<div id="${mount}"></div>`,
+    `<script src="${src}"></script>`,
+    `<script>${job}${fallback}</script>`,
+  ].join("\n");
+}
+
+const WIDGET_GUIDE = [
+  "Pass everything below the line to visualize's show_widget unchanged, as widget_code, with title daybook_day_list " +
+    'and loading_messages ["Opening the daybook"]. Call its read_me first if this session has not. Write nothing after the widget.',
+  "",
+  'Presses in the widget collect until its apply pill sends them as one message, "Daybook changes: done <id>; later <id>; ' +
+    'today <id>; drop <id>." Apply every change in one pass, then call daybook_widget again and draw the new page:',
+  "- done <id>: daybook_close {id}",
+  '- drop <id>: daybook_close {id, status: "dropped"}',
+  '- later <id>: daybook_move {id, horizon: "later"}',
+  '- today <id>: daybook_move {id, horizon: "today"}',
+  'A message ending "Then show later." or reading "Daybook: show later." asks for the next draw with later: true.',
+  "Today holds three. If the changes leave more than three on it, name them in one line and let Austen pick what comes off.",
+  "",
+  "---",
+].join("\n");
+
 const triggerProperties = {
   surface: { type: "string", description: "mail, calendar, slack, tasks, chat, notebook" },
   external_id: {
@@ -194,10 +266,10 @@ export const DAYBOOK_TOOLS: ToolDefinition[] = [
   {
     name: "daybook_show",
     description:
-      "Show Austen his Daybook as an interactive list in the chat: today's items and later, with Done, " +
-      "Later, Today and Drop on each row. Use when he asks to see or work his list. Later shows as a " +
-      "count unless later is true; pass it only when he asks for later or the whole list. To read the " +
-      "list for your own reasoning, call daybook_list instead.",
+      "Show Austen his day list in Claude chat, drawn as this server's view: today's items and later, " +
+      "with done, later, today and drop on each row. Claude Code draws nothing from this tool, so call " +
+      "daybook_widget there instead. Later shows as a count unless later is true; pass it only when he " +
+      "asks for later or the whole list. To read the list for your own reasoning, call daybook_list.",
     inputSchema: {
       type: "object",
       properties: {
@@ -205,29 +277,32 @@ export const DAYBOOK_TOOLS: ToolDefinition[] = [
       },
     },
     ui: { resourceUri: DAYBOOK_VIEW_URI, visibility: ["model", "app"] },
-    run: async (a) => {
-      const all = await listItems();
-      const later = all.filter((i) => i.horizon !== "today");
-      const showLater = a.later === true;
-      return {
-        today: todayPT(),
-        writable: WRITES_ALLOWED,
-        later_shown: showLater,
-        later_count: later.length,
-        items: showLater ? all : all.filter((i) => i.horizon === "today"),
-      };
+    run: async (a) => dayList(a.later === true),
+  },
+  {
+    name: "daybook_widget",
+    description:
+      "Show Austen his day list in Claude Code. Returns a page to pass unchanged to visualize's show_widget, " +
+      "and says how to apply the one message its controls send. Use it whenever he asks to see or work his " +
+      "list in Claude Code; Claude chat uses daybook_show. Later shows as a count unless later is true.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        later: { type: "boolean", default: false, description: "Draw the later items, not only their count" },
+      },
     },
+    run: async (a) => `${WIDGET_GUIDE}\n${await widgetPage(a.later === true)}`,
   },
   {
     name: "daybook_move",
-    description: "Move a Daybook item between today and later, keeping that day's focus list in step.",
+    description:
+      "Move a Daybook item between today and later, keeping that day's focus list in step. The day " +
+      "list's today and later controls land here, so apply them with this rather than daybook_upsert.",
     inputSchema: {
       type: "object",
       properties: { id: { type: "string" }, horizon: { type: "string", enum: ["today", "later"] } },
       required: ["id", "horizon"],
     },
-    // The view's Today and Later buttons. The model already has daybook_upsert.
-    ui: { visibility: ["app"] },
     run: async (a) => {
       requireWrites("daybook_move");
       const horizon = String(a.horizon);
