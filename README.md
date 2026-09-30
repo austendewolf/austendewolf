@@ -10,5 +10,13 @@ Engineer, builder. I've spent the last decade shipping software, scrappy first p
 - **[flatly](https://austendewolf.com/projects/flatly)** · property management for landlords and small operators
 - **[tiptapp](https://austendewolf.com/projects/tiptapp)** · digital tipping for service businesses
 
+**Claude Code plugins:**
+- **[daybook](plugins/daybook)** · a photographed page of handwritten notes becomes a day's actions, three on today
+- **[render-visual](plugins/render-visual)** · a table, matrix or org chart written as HTML comes back as a trimmed PNG or a landscape PDF
+
+```
+claude plugin marketplace add austendewolf/austendewolf
+```
+
 **Find me elsewhere:**
 [austendewolf.com](https://austendewolf.com) · [LinkedIn](https://www.linkedin.com/in/austendewolf/) · [Instagram](https://www.instagram.com/austendewolf) · [npm](https://www.npmjs.com/~deausten)

@@ -1,0 +1,28 @@
+{
+  "name": "austendewolf",
+  "description": "Austen DeWolf's public Claude Code plugins: the daybook that reads a handwritten page, and the renderer that turns HTML into a PNG or PDF.",
+  "owner": {
+    "name": "Austen DeWolf",
+    "url": "https://austendewolf.com"
+  },
+  "plugins": [
+    {
+      "name": "daybook",
+      "source": "./plugins/daybook",
+      "description": "Turn a photographed page of handwritten notes into a daily list of actions, capped at three for today.",
+      "homepage": "https://github.com/austendewolf/austendewolf/tree/main/plugins/daybook",
+      "keywords": [
+        "daybook",
+        "tasks",
+        "notebook",
+        "handwriting",
+        "planning"
+      ]
+    },
+    {
+      "name": "render-visual",
+      "source": "./plugins/render-visual",
+      "description": "Render a table, matrix, org chart or comparison grid from HTML to a trimmed PNG or a landscape PDF with headless Chrome."
+    }
+  ]
+}

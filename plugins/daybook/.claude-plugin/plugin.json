@@ -1,0 +1,18 @@
+{
+  "name": "daybook",
+  "version": "0.2.0",
+  "description": "Turn a photographed page of handwritten notes into a daily list of actions, capped at three for today.",
+  "homepage": "https://github.com/austendewolf/austendewolf/tree/main/plugins/daybook",
+  "repository": "https://github.com/austendewolf/austendewolf",
+  "author": {
+    "name": "Austen DeWolf",
+    "url": "https://austendewolf.com"
+  },
+  "keywords": [
+    "daybook",
+    "tasks",
+    "notebook",
+    "handwriting",
+    "planning"
+  ]
+}
