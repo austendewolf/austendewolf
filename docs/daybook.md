@@ -20,7 +20,7 @@ The day list draws inside Claude from one module, `plugins/daybook/ui/daybook.js
 
 | Table | Holds |
 |---|---|
-| `items` | id, title, kind, status (open, closed, dropped), horizon (today, later), due, priority, ranked_by_hand, person, link, source, first_seen, closed_on, updated_at |
+| `items` | id, title, kind, status (open, closed, dropped), horizon (today, later), due, pressure, size, priority (hand order inside a band), ranked_by_hand, prep, prep_at, person, link, source, first_seen, closed_on, updated_at. Rank comes from due, pressure and size; see `docs/daybook-actionable.md` |
 | `days` | date, focus ids, added ids, closed ids, load |
 | `triggers` | one row per thing that pointed at an item: surface, account, the id on that surface, link, what it originally said, when it was seen |
 | `captures` | one row per notebook scan: Drive file id, page date, processed_at, the transcribed lines and the item each one touched |

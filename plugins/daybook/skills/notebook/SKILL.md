@@ -78,7 +78,7 @@ Check them before drafting, not after, and put the link on the item so he does n
 |---|---|---|
 | New | No open or recently closed item shares the object and person | One new item, with the context links as its source |
 | Duplicate | An open item already says the same thing, as well or better | No new row. Attach a `notebook` trigger to the existing item so the page is on record, and leave the title alone |
-| Augments | An open item covers the same work and the page or the context adds something it lacks: a cue, a date, a name, a link, a sharper object, or a next step the old wording did not reach | Edit the existing item in place, carrying its `updated_at`. Keep its id and priority, and tighten the title only where the new material is more specific. Attach the `notebook` trigger |
+| Augments | An open item covers the same work and the page or the context adds something it lacks: a cue, a date, a name, a link, a sharper object, or a next step the old wording did not reach | Edit the existing item in place, carrying its `updated_at`. Keep its id and hand order, correct its due, pressure or size where the new material changes them, and tighten the title only where the new material is more specific. Attach the `notebook` trigger |
 | Done | The resolution check found clear evidence it happened | Closed on the day the evidence says, with the permalink as source. When it also matches an open item, close that item, on the same date and with the same evidence, and write no second row. Two rows for one finished thing is the worst outcome on this table |
 
 Partial evidence resolves to Augments, with the source saying what moved, never to Done. When a line matches an item that already closed, it is a duplicate of a closed item and gets no row at all; name it in the Closing section as already done, so he sees why it vanished.
@@ -87,13 +87,13 @@ Partial evidence resolves to Augments, with the source saying what moved, never 
 5. Read the proposal back as a widget and let him confirm it line by line. Render it with the `visualize` MCP (`show_widget`) from `widget.html` in this skill's folder: read the file, replace `__PAGE_DATES__` with the page dates, like "09/28 and 09/29", and `__ROWS__` with the rows as a JavaScript array shaped as in Flush rows below, and pass the result through unchanged. Never write the layout fresh, because improvised layouts drifted from flush to flush and he could not read them. The layout lives in `plugins/daybook/ui/daybook.js`, the module the day list draws from too, and the template loads it at a git tag. When he asks for a layout change, change the module, tag the commit, and point the template at the new tag.
 
    Group the rows by thread, one section per thread, each headed with a plain name for the work they share, like "Q4 roadmap" or "Hiring". Rows that share a person and an object, or that feed the same next step, belong in one thread. Lines with no thread go in a last section called "Other". A row from Google Tasks joins its thread like any page line, and its margin note names the Doc or space it was assigned in. Inside a thread, actions come first, then notes and decisions, then closings. A blocker needs no type of its own: it is a Heard note in the same thread as the action it gates, and that action's due date falls after it. Each kind of row shows the following:
-   - **Actions**: each refined action with its priority, cue and link. An Augments row shows the new title with the words it adds tinted, and the item's current title underneath, so he can see the edit before it lands. Every action carries its due date as data, and the widget spells it out in full with the distance in parentheses. A Duplicate row shows the page line and the item it folds into, with nothing to edit.
+   - **Actions**: each refined action with its pressure, size, cue and link. An Augments row shows the new title with the words it adds tinted, and the item's current title underneath, so he can see the edit before it lands. Every action carries its due date as data, and the widget spells it out in full with the distance in parentheses. A Duplicate row shows the page line and the item it folds into, with nothing to edit.
    - **Notes**: each lightning bolt, plus any line whose wording turned out to be a thought, written to the note shape below. A note lands in the Daybook as `kind: note` and a decision as `kind: decision`, so both stay searchable, and neither becomes a task. The widget marks new actions with a dot, matching the dot on the page, notes with a bolt and decisions with a gavel, both amber.
    - **Closing**: crosses, plus lines the resolution check found done, each with its evidence link. A Done row that also closes an open item names that item, because one Keep there closes two things.
 
-   Clicking a row's icon opens a menu that changes its type, because the mark on the page is sometimes wrong. Retyping has to change the sentence, so write each row's other shapes up front in its `as` field: every note and decision carries a `new` version written to the action shape below, with its own priority and due date, every action carries a `note` version as one plain sentence, and every Closing row that could still be open carries a `new` version. The widget swaps the matching version in when he retypes. A line with no honest action behind it, like a note about how he slept, gets no `new` version, and a retype flags it for rewording.
+   Clicking a row's icon opens a menu that changes its type, because the mark on the page is sometimes wrong. Retyping has to change the sentence, so write each row's other shapes up front in its `as` field: every note and decision carries a `new` version written to the action shape below, with its own pressure, size and due date, every action carries a `note` version as one plain sentence, and every Closing row that could still be open carries a `new` version. The widget swaps the matching version in when he retypes. A line with no honest action behind it, like a note about how he slept, gets no `new` version, and a retype flags it for rewording.
 
-   Every row gets a square checkbox, checked by default. A green check means the line goes into the Daybook, and an empty box means it stays out. Mark merges on the row itself. One submit button sends the whole decision back through `sendPrompt`, with skipped ids and any rewording he typed into a row, as `Notebook flush confirmed for <dates>. Dropped: <ids>. Changed: <entries>. Keep everything else as proposed.` A changed entry reads `id: text` when he reworded it, and `id (note to new, p20, due 2026-10-05): text` when he retyped it. Nothing is written to the Daybook before that submit arrives. When he answers in text instead, take "skip 3, 7" or a reworded line the same way.
+   Every row gets a square checkbox, checked by default. A green check means the line goes into the Daybook, and an empty box means it stays out. Mark merges on the row itself. One submit button sends the whole decision back through `sendPrompt`, with skipped ids and any rewording he typed into a row, as `Notebook flush confirmed for <dates>. Dropped: <ids>. Changed: <entries>. Keep everything else as proposed.` A changed entry reads `id: text` when he reworded it, and `id (note to new, waiting, quick, due 2026-10-05): text` when he retyped it. Nothing is written to the Daybook before that submit arrives. When he answers in text instead, take "skip 3, 7" or a reworded line the same way.
 6. Write only what he kept, each row as the type he left it on, in one `daybook_upsert` batch: new actions, notes and decisions as new items, Augments as edits carrying `updated_at`, Duplicates as a trigger on the existing item, and closures through `daybook_close` on the evidence date. Every item carries a trigger for where it came from: `notebook` for a page line, `tasks` with the account and task id for a Google Task, and both when the two merged. Skipped lines get no row at all, because a skipped line means no. A skipped Augments leaves the existing item exactly as it was.
 7. Draw the day list with Later open, through the `day-list` skill, and ask him to pick today's three on it. Claude never picks them.
 8. Tell him the page is flushed. He can recycle it.
@@ -115,7 +115,15 @@ A line whose real content is a judgment still gets a physical verb: "decide whet
 
 **A cue that names a meeting resolves to a date.** "At your next 1:1 with his manager" sits on his calendar with a real start time, so look it up, write the date into the line, and set `due` to it. A cue that stays vague leaves `due` empty and the item drifts. Look up the event even when the paper says only a person's name, because a 1:1 is the usual place a line like that gets done.
 
-**Every item carries a priority.** The list is one ordered sequence, so a new item takes a number that places it against what is already open rather than landing at the end. Pick the number from the items it sits between, and say the number out loud in step 5 so he can move it.
+**Every item carries three facts, and the server ranks from them.** Never pick a priority number. Set these instead, and the list places the item and prints why:
+
+| Fact | Values | Set it to |
+|---|---|---|
+| `due` | a date or null | The date someone named, or the date of the meeting the cue resolves to. Null when nobody named one |
+| `pressure` | `waiting`, `meeting`, `deadline`, `none` | `waiting` when a named person is blocked on him (and set `person`), `meeting` when a meeting needs it done first, `deadline` when a date passes, `none` when nothing happens if he waits |
+| `size` | `quick`, `session`, `project` | `quick` for one reply, one approval or one short message, under fifteen minutes. `session` for one sitting. `project` for several sittings or other people |
+
+The order that results: overdue, due today, someone waiting, due this week, quick, the rest, then anything untouched for a month. A wrong place means a wrong fact, so when he says an item sits too low, ask which fact is off rather than renumbering it. Leave `priority` alone; it only records his hand order inside a group.
 
 ## The shape of a note
 
@@ -140,13 +148,14 @@ One idea goes in each note. Two people saying two things become two notes. A not
 | `id` | A stable slug, which the submit message names |
 | `k` | `new` for an open action, `edit` for a change to an open item, `note` for something heard or thought, `decision` for something decided, `done` for something that already happened |
 | `t` | The proposed text, which he can edit in place |
-| `p` | The priority number |
+| `pressure` | `waiting`, `meeting`, `deadline` or `none`, on an action |
+| `size` | `quick`, `session` or `project`, on an action |
 | `due` | A date or a local time, `2026-10-05` or `2026-10-05T13:30`, which the widget writes out in full with the distance in parentheses |
 | `m` | Anything else for the muted line: what merged, where the evidence came from |
 | `old` | On an edit row, the item's current title. The widget tints the words the edit adds and shows this underneath |
 | `f` | Something he must check, in the gap color |
 | `l` | The evidence permalink |
-| `as` | The line rewritten for the other types, keyed by type: `{new: {t, p, due, f}, note: "...", decision: "...", done: "..."}`. A string stands for `t` alone |
+| `as` | The line rewritten for the other types, keyed by type: `{new: {t, pressure, size, due, f}, note: "...", decision: "...", done: "..."}`. A string stands for `t` alone |
 
 Every row needs `id`, `k` and `t`, and the widget draws nothing but an error when a row's `k` is anything else. A retype with no version in `as` keeps the text and flags it for rewording.
 

@@ -55,6 +55,34 @@ export const daybookItems = daybookSchema.table(
      * deadline someone invented for it.
      */
     due: date("due"),
+    /**
+     * What happens if he does nothing: someone is blocked (`waiting`), a
+     * meeting needs him holding it (`meeting`), a date passes (`deadline`), or
+     * nothing (`none`). Null until intake or the backfill sets it, and rank
+     * reads null as `none`. With `due` and `size`, this is what the list is
+     * ordered by; see `apps/web/src/lib/daybook/rank.ts`.
+     */
+    pressure: text("pressure"),
+    /** `quick` (under fifteen minutes), `session` (one sitting) or `project`. Null reads as `session`. */
+    size: text("size"),
+    /**
+     * A draft Claude wrote ahead of time so the item can be finished in one
+     * approval: a message, document comments, a calendar hold or an outline.
+     * Never sent by anything but Austen's yes.
+     */
+    prep: jsonb("prep").$type<{
+      shape: "message" | "comments" | "hold" | "outline";
+      /** Where it goes: a Slack channel or thread, a mail thread, a doc, a calendar. */
+      target?: string | null;
+      /** The draft itself, in his voice. Comments are one per line, numbered. */
+      body: string;
+      /** For a hold: ISO start and end, and attendee emails. */
+      start?: string | null;
+      end?: string | null;
+      attendees?: string[] | null;
+    }>(),
+    /** When `prep` was written. A draft older than the item's last edit is stale. */
+    prepAt: timestamp("prep_at", { withTimezone: true, mode: "string" }),
     /** An email, matched against meeting attendees. */
     person: text("person"),
     link: text("link"),
@@ -69,6 +97,8 @@ export const daybookItems = daybookSchema.table(
   (t) => [
     check("items_status_check", sql`${t.status} in ('open', 'closed', 'dropped')`),
     check("items_horizon_check", sql`${t.horizon} in ('today', 'later')`),
+    check("items_pressure_check", sql`${t.pressure} in ('waiting', 'meeting', 'deadline', 'none')`),
+    check("items_size_check", sql`${t.size} in ('quick', 'session', 'project')`),
     index("items_open_idx").on(t.status, t.horizon, t.priority),
     index("items_closed_on_idx").on(t.closedOn),
   ],

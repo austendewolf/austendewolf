@@ -11,6 +11,7 @@ import {
   type CalendarEvent,
   type Result,
 } from "@/app/daybook/actions";
+import { BAND, compare, place } from "@/lib/daybook/rank";
 import type { Day, Item } from "@/lib/daybook/store";
 
 /**
@@ -301,7 +302,10 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
   function itemRow(id: string, it: Item, on: string, mode: Mode) {
     const old = it.status === "open" && daysBetween(it.first_seen, on) > OLD_DAYS;
     const mt = mode === "today" || mode === "later" ? meetingFor(it) : null;
+    // Why it sits where it does. A wrong reason means a wrong fact, and the fact is what gets fixed.
+    const placed = mode === "today" || mode === "later" ? place(it, on) : null;
     const meta = [
+      placed?.reason ? `<span class="why ${placed.band <= BAND.today ? "is-hot" : placed.band === BAND.stale ? "is-cold" : ""}">${esc(placed.reason)}</span>` : "",
       it.source ? (it.link ? `<a href="${esc(it.link)}" target="_blank" rel="noopener">${esc(it.source)}</a>` : `<span>${esc(it.source)}</span>`) : (it.link ? `<a href="${esc(it.link)}" target="_blank" rel="noopener">Open</a>` : ""),
       mt ? `<span class="when">${fmt(mt.s)}, ${esc(mt.t)}</span>` : "",
     ].join("");
@@ -332,7 +336,9 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
      */
     const shut = !state.opened[id];
     const more = `<button class="more" data-more="${esc(id)}">${shut ? "More" : "Less"}</button>`;
-    return `<div class="row ${due.cls} ${old ? "is-old" : ""} ${done ? "is-done" : ""} ${shut ? "is-shut" : ""}" ${sortable ? `data-id="${esc(id)}"` : ""}>${grip}<span class="mark">${markIcon(markFor(it, mode, on))}</span><span class="due">${due.word}</span><div class="cell"><div class="item-t">${esc(it.title)}${who}</div>${meta ? `<div class="meta">${meta}</div>` : ""}${more}</div><div class="pills">${actions}</div></div>`;
+    // A drag stays inside its group: the band, and in a band a date drives, the date too.
+    const group = placed ? (placed.band <= BAND.today || placed.band === BAND.week ? `${placed.band}:${it.due}` : String(placed.band)) : "";
+    return `<div class="row ${due.cls} ${old ? "is-old" : ""} ${done ? "is-done" : ""} ${shut ? "is-shut" : ""}" ${sortable ? `data-id="${esc(id)}" data-group="${esc(group)}"` : ""}>${grip}<span class="mark">${markIcon(markFor(it, mode, on))}</span><span class="due">${due.word}</span><div class="cell"><div class="item-t">${esc(it.title)}${who}</div>${meta ? `<div class="meta">${meta}</div>` : ""}${more}</div><div class="pills">${actions}</div></div>`;
   }
 
   function conflictRows() {
@@ -362,17 +368,8 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
     if (wait > 0) { clearTimeout(holdTimer); holdTimer = setTimeout(renderMain, wait); return; }
     const on = state.selected, today = todayPT(), isToday = on === today;
     const entries = Object.entries(state.items);
-    const byAge = (a: Entry, b: Entry) => (a[1].first_seen || "").localeCompare(b[1].first_seen || "");
-    // Lower priority number is more urgent; unranked items fall to the bottom, oldest first.
-    const byPriority = (a: Entry, b: Entry) => (a[1].priority ?? Infinity) - (b[1].priority ?? Infinity) || byAge(a, b);
-    // A date someone actually named beats a rank he set by hand; undated work sorts under it.
-    const byDueThenPriority = (a: Entry, b: Entry) => {
-      const da = dueOf(a[1]), db = dueOf(b[1]);
-      if (da && db) return da.localeCompare(db) || byPriority(a, b);
-      if (da) return -1;
-      if (db) return 1;
-      return byPriority(a, b);
-    };
+    // Rank comes from the item's facts, through the same function the server uses. Hand order only breaks ties inside a band.
+    const byRank = (a: Entry, b: Entry) => compare(a[1], b[1], today);
     const capRow = (last: string) => `<div class="row is-cap"><span></span><span></span><span>due</span><span>task</span><span>${last}</span></div>`;
     // The strip above already names the day, so the page opens straight on its counts.
     let h = "";
@@ -384,8 +381,8 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
 
     if (isToday) {
       const open = entries.filter(([, it]) => it.status === "open");
-      const focus = open.filter(([, it]) => it.horizon === "today").sort(byPriority);
-      const later = open.filter(([, it]) => it.horizon !== "today").sort(byDueThenPriority);
+      const focus = open.filter(([, it]) => it.horizon === "today").sort(byRank);
+      const later = open.filter(([, it]) => it.horizon !== "today").sort(byRank);
       const closed = entries.filter(([, it]) => it.status !== "open" && it.closed_on === today);
       const carried = focus.filter(([, it]) => it.first_seen < today).length;
       const oldest = open.length ? Math.max(...open.map(([, it]) => daysBetween(it.first_seen, today))) : 0;
@@ -435,7 +432,7 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
       if (shutL) {
         h += `<div class="folded"><b>${later.length}</b> waiting${overdue ? `<span class="is-gap"><b>${overdue}</b> overdue</span>` : ""}</div>`;
       } else {
-        h += `<p class="note">Still open, not for today, soonest due first. Drag the handle to reorder. The morning run carries everything here forward, keeps your order, and closes what you finish in Google Tasks.</p><div class="rows" data-list="later">`;
+        h += `<p class="note">Still open, not for today. Overdue first, then due today, someone waiting, due this week, and quick ones. The grey clause on each row says which. Drag the handle to reorder inside that group; to move an item further, change its date or what it waits on. The morning run carries everything here forward, keeps your order, and closes what you finish in Google Tasks.</p><div class="rows" data-list="later">`;
         h += later.length ? later.map(([id, it]) => itemRow(id, it, today, "later")).join("") : `<div class="empty">Nothing waiting.</div>`;
         h += `</div>`;
       }
@@ -671,11 +668,18 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
     renderMain();
   }
 
+  /*
+   * The rows a drag may move among: its own list, and inside it only its group.
+   * Rank sorts a group's rows next to each other, so they stay contiguous.
+   */
+  const groupRows = (row: HTMLElement) =>
+    [...row.parentElement!.querySelectorAll<HTMLElement>(":scope > .row[data-id]")].filter((r) => r.dataset.group === row.dataset.group);
+
   const onPointerDown = (ev: PointerEvent) => {
     const g = (ev.target as Element).closest<HTMLButtonElement>(".grip");
     if (!g || g.disabled || ev.button !== 0 || drag) return;
     const row = g.closest<HTMLElement>(".row")!, list = row.parentElement!;
-    const rows = [...list.querySelectorAll<HTMLElement>(":scope > .row[data-id]")];
+    const rows = groupRows(row);
     ev.preventDefault();
     g.focus({ preventScroll: true });
     drag = { id: row.dataset.id!, row, list, rows, rects: rows.map((r) => r.getBoundingClientRect()), from: rows.indexOf(row), to: rows.indexOf(row), startY: ev.clientY, pointerId: ev.pointerId };
@@ -713,7 +717,7 @@ export function mountDaybook(els: { root: HTMLElement; days: HTMLElement; main: 
     const g = (ev.target as Element).closest?.<HTMLButtonElement>(".grip");
     if (!g || g.disabled || drag || (ev.key !== "ArrowUp" && ev.key !== "ArrowDown")) return;
     ev.preventDefault();
-    const row = g.closest<HTMLElement>(".row")!, ids = [...row.parentElement!.querySelectorAll<HTMLElement>(":scope > .row[data-id]")].map((r) => r.dataset.id!);
+    const row = g.closest<HTMLElement>(".row")!, ids = groupRows(row).map((r) => r.dataset.id!);
     const from = ids.indexOf(row.dataset.id!), to = from + (ev.key === "ArrowUp" ? -1 : 1);
     if (to < 0 || to >= ids.length) return;
     const before = rowRects();

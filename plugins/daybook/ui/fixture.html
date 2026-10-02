@@ -76,16 +76,16 @@
   }
 
   var TODAY = [
-    { id: "fx:checklist", title: "Send Sam the revised launch checklist, Thursday morning", horizon: "today", priority: 1, due: day(1), person: "sam.rivera@example.com", link: "https://example.slack.com/archives/C0123ABCD/p1700000000000100", source: "DM, Sam Rivera 09/28" },
-    { id: "fx:pricing", title: "Review the pricing page draft with Lee before the design sync", horizon: "today", priority: 2, due: day(0) + "T13:30", link: "https://docs.google.com/document/d/1FaKeDoCuMeNtIdAbCdEf/edit", source: "Doc comments AAAAbCdEfGhIjKlM and AAAAzYxWvUtSrQp, 09/25; unresolved" },
+    { id: "fx:checklist", title: "Send Sam the revised launch checklist, Thursday morning", horizon: "today", priority: 1, due: day(1), person: "sam.rivera@example.com", link: "https://example.slack.com/archives/C0123ABCD/p1700000000000100", source: "DM, Sam Rivera 09/28", reason: "Sam is waiting", prep: "message" },
+    { id: "fx:pricing", title: "Review the pricing page draft with Lee before the design sync", horizon: "today", priority: 2, due: day(0) + "T13:30", link: "https://docs.google.com/document/d/1FaKeDoCuMeNtIdAbCdEf/edit", source: "Doc comments AAAAbCdEfGhIjKlM and AAAAzYxWvUtSrQp, 09/25; unresolved", reason: "meeting today", prep: "comments" },
     { id: "fx:offsite", title: "Book the room for the quarterly planning offsite", horizon: "today", priority: 3, person: "jo.anne-marie@example.com", source: "Notebook 09/29" },
   ];
   var LATER = [
-    { id: "fx:freeze", title: "Ask Priya in the leads channel whether the migration waits for the freeze", horizon: "later", priority: 4, due: day(-2), person: "priya.natarajan@example.com", link: "https://example.slack.com/archives/C0456EFGH/p1700000000000200", source: "#eng-leads, Priya 09/25" },
+    { id: "fx:freeze", title: "Ask Priya in the leads channel whether the migration waits for the freeze", horizon: "later", priority: 4, due: day(-2), person: "priya.natarajan@example.com", link: "https://example.slack.com/archives/C0456EFGH/p1700000000000200", source: "#eng-leads, Priya 09/25", reason: "due 2 days ago" },
     { id: "fx:onepager", title: "Write the one-pager for the onboarding revamp", horizon: "later", priority: 5, due: day(9), link: "https://example.atlassian.net/browse/ABC-123", source: "ABC-123" },
-    { id: "fx:branch", title: "Reply to the review bot about the stale release branch", horizon: "later", priority: 6, link: "https://github.com/example/repo/pull/42", source: "GitHub bot DM, 24 days stale" },
+    { id: "fx:branch", title: "Reply to the review bot about the stale release branch", horizon: "later", priority: 6, link: "https://github.com/example/repo/pull/42", source: "GitHub bot DM, 24 days stale", reason: "quick, 24 days old" },
     { id: "fx:pto", title: "Approve the time-off requests waiting in the HR tool", horizon: "later", priority: 7, due: day(20), source: "HR time-off requests" },
-    { id: "fx:retro", title: "Draft the agenda for the team retro, next Tuesday", horizon: "later", priority: 8, source: "Austen, 09/28. Wants a written round first" },
+    { id: "fx:retro", title: "Draft the agenda for the team retro, next Tuesday", horizon: "later", priority: 8, source: "Austen, 09/28. Wants a written round first", reason: "41 days, no motion" },
     { id: "fx:survey", title: "Send the quarterly survey results to the leads", horizon: "later", priority: null, link: "https://docs.google.com/spreadsheets/d/1FaKeShEeTiDaBcDeF/edit", source: "Quarterly survey sheet" },
   ];
   function copy(x) { return JSON.parse(JSON.stringify(x)); }
@@ -149,11 +149,11 @@
     dates: "09/28 and 09/29",
     rows: [
       ["Actions"],
-      { id: "notebook:2026-09-29:checklist", k: "new", t: "Send Sam the revised launch checklist, Thursday morning", p: 1, due: day(1), m: "merged with a second line about the checklist", l: "https://example.slack.com/archives/C0123ABCD/p1700000000000100" },
-      { id: "action:austen:pricing", k: "edit", old: "Review pricing page", t: "Review the pricing page draft with Lee before the design sync", p: 2, due: day(0) + "T13:30" },
-      { id: "notebook:2026-09-29:vendor", k: "new", t: "Ask the vendor about renewal terms", p: 9, f: "no cue yet, add a when" },
+      { id: "notebook:2026-09-29:checklist", k: "new", t: "Send Sam the revised launch checklist, Thursday morning", pressure: "waiting", size: "quick", due: day(1), m: "merged with a second line about the checklist", l: "https://example.slack.com/archives/C0123ABCD/p1700000000000100" },
+      { id: "action:austen:pricing", k: "edit", old: "Review pricing page", t: "Review the pricing page draft with Lee before the design sync", pressure: "meeting", size: "session", due: day(0) + "T13:30" },
+      { id: "notebook:2026-09-29:vendor", k: "new", t: "Ask the vendor about renewal terms", pressure: "none", size: "quick", f: "no cue yet, add a when" },
       ["Notes"],
-      { id: "notebook:2026-09-29:retro", k: "note", t: "The team wants shorter retros, and Lee suggested a written round first.", m: "from Lee", as: { new: { t: "Ask Lee to draft the written retro round before next Tuesday", p: 8, due: day(6) } } },
+      { id: "notebook:2026-09-29:retro", k: "note", t: "The team wants shorter retros, and Lee suggested a written round first.", m: "from Lee", as: { new: { t: "Ask Lee to draft the written retro round before next Tuesday", pressure: "meeting", size: "quick", due: day(6) } } },
       { id: "notebook:2026-09-28:takehome", k: "decision", t: "Keep the take-home exercise for senior hires through the end of the year." },
       ["Closing"],
       { id: "action:austen:offsite", k: "done", t: "Book the room for the quarterly planning offsite", m: "closes an open item", l: "https://example.slack.com/archives/C0789IJKL/p1700000000000300" },

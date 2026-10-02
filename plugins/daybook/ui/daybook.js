@@ -25,7 +25,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "0.3.0";
+  const VERSION = "0.5.0";
   if (window.Daybook) {
     window.Daybook.drain();
     return;
@@ -132,6 +132,8 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
 .db .m .due.near{color:var(--amber)}
 .db .m .due.over{color:var(--gap);font-weight:500}
 .db .m .flag{color:var(--gap);font-weight:500}
+.db .m .why{color:var(--ink)}
+.db .m .prep{color:var(--green-shade)}
 .db .m a,.db .foot a{color:var(--na);text-underline-offset:2px}
 .db .m a:hover,.db .foot a:hover{color:var(--green-shade)}
 .db .acts{display:flex;gap:6px}
@@ -355,11 +357,22 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
     );
   }
 
+  // The two facts rank reads besides the date, in words: "someone waiting, quick".
+  const PRESSURE_WORDS = { waiting: "someone waiting", meeting: "for a meeting", deadline: "deadline", none: "nothing waiting" };
+  function factsText(s) {
+    const words = [PRESSURE_WORDS[s.pressure] || "", s.size || ""].filter(Boolean).join(", ");
+    return words ? '<span class="why">' + esc(words) + "</span>" : "";
+  }
+
   function metaLine(it, today) {
     const label = it.link ? linkLabel(it.link) : "";
     const from = origin(it.source, label);
+    // The server ranks the list and says why each item sits where it does. A
+    // reason about the date is left to the due text, which says it in full.
+    const why = it.reason && !/^due /.test(it.reason) ? it.reason : "";
     const parts = [
-      it.priority != null ? "p" + it.priority : "",
+      why ? '<span class="why">' + esc(why) + "</span>" : "",
+      it.prep ? '<span class="prep">' + esc(it.prep === "hold" ? "hold drafted" : it.prep + " drafted") + "</span>" : "",
       it.due ? dueText(it.due, today) : "",
       it.person ? esc(personName(it.person)) : "",
       from ? esc(from) : "",
@@ -418,6 +431,9 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
         link: safeUrl(i.link),
         source: i.source ? String(i.source) : "",
         updated_at: i.updated_at || null,
+        reason: typeof i.reason === "string" ? i.reason : "",
+        // The widget page sends the draft's shape; the chat view sends the whole draft.
+        prep: typeof i.prep === "string" ? i.prep : i.prep && typeof i.prep.shape === "string" ? i.prep.shape : null,
       }));
     return {
       today: validDay(x.today) || todayPT(),
@@ -739,7 +755,7 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
       }
       const t = r.t == null ? "" : String(r.t);
       rows.push(r);
-      state.push({ keep: true, k: r.k, t: t, t0: t, p: r.p, due: r.due || null, f: r.f || "" });
+      state.push({ keep: true, k: r.k, t: t, t0: t, pressure: r.pressure || null, size: r.size || null, due: r.due || null, f: r.f || "" });
       html += '<div class="row fl" data-ix="' + (rows.length - 1) + '"></div>';
     });
     html +=
@@ -754,7 +770,7 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
     const rowEl = (i) => db.querySelector('.row.fl[data-ix="' + i + '"]');
 
     function version(r, k) {
-      if (k === r.k) return { t: r.t, due: r.due, p: r.p, f: r.f };
+      if (k === r.k) return { t: r.t, due: r.due, pressure: r.pressure, size: r.size, f: r.f };
       const a = r.as && r.as[k];
       if (!a) return null;
       return typeof a === "string" ? { t: a } : a;
@@ -766,7 +782,7 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
       const s = state[i];
       const evidence = safeUrl(r.l);
       const meta = [
-        ACT(s.k) && s.p != null ? "p" + s.p : "",
+        ACT(s.k) ? factsText(s) : "",
         ACT(s.k) ? (s.due ? dueText(s.due, today) : "no due date") : "",
         r.m ? esc(r.m) : "",
         s.f ? '<span class="flag">' + esc(s.f) + "</span>" : "",
@@ -799,7 +815,8 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
       const v = version(r, k);
       if (v) {
         if (v.t != null) s.t = String(v.t);
-        s.p = v.p != null ? v.p : r.p;
+        s.pressure = v.pressure != null ? v.pressure : r.pressure || null;
+        s.size = v.size != null ? v.size : r.size || null;
         s.due = v.due !== undefined ? v.due : ACT(k) && ACT(r.k) ? r.due : null;
         s.f = v.f || "";
       } else {
@@ -872,7 +889,7 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
         const typed = s.k !== r.k;
         const worded = norm(s.t) !== norm(s.t0);
         if (!typed && !worded) return;
-        const tag = typed ? " (" + r.k + " to " + s.k + (ACT(s.k) ? (s.p != null ? ", p" + s.p : "") + (s.due ? ", due " + s.due : ", no due") : "") + ")" : "";
+        const tag = typed ? " (" + r.k + " to " + s.k + (ACT(s.k) ? (s.pressure ? ", " + s.pressure : "") + (s.size ? ", " + s.size : "") + (s.due ? ", due " + s.due : ", no due") : "") + ")" : "";
         changed.push(r.id + tag + ": " + norm(s.t));
       });
       sent = true;

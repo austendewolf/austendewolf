@@ -201,6 +201,11 @@
 .daybook .meta a { color: var(--na); }
 .daybook .meta a:hover { color: var(--green-shade); }
 .daybook .meta .when { color: var(--green-shade); }
+/* Why the row sits where it does. Amber once a date has arrived, faded once
+   the item has gone a month without anyone touching it. */
+.daybook .meta .why { color: color-mix(in srgb, var(--ink) 70%, transparent); }
+.daybook .meta .why.is-hot { color: var(--gap); }
+.daybook .meta .why.is-cold { opacity: 0.6; font-style: italic; }
 /* When it is owed. No date is a real answer, so it reads as one rather than as a blank. */
 .daybook .due { font-family: var(--mono); font-size: 11px; letter-spacing: 0.4px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .daybook .row.is-over .due, .daybook .row.is-over .mark { color: var(--gap); }

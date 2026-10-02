@@ -8,6 +8,7 @@ import {
   type DaybookTrigger,
 } from "@awd/db";
 import { and, asc, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
+import { PRESSURES, ranked, SIZES, type Placement, type Pressure, type Size } from "./rank";
 
 /**
  * The Daybook's reads and writes, shared by the page and the MCP tools.
@@ -49,6 +50,13 @@ export interface Item {
   ranked_by_hand: string | null;
   /** When it is owed. Null for most of the list, which is not a deadline of zero. */
   due: string | null;
+  /** What happens if he does nothing. Null until someone labels it; rank reads null as `none`. */
+  pressure: Pressure | null;
+  /** How big it is. Null until someone labels it; rank reads null as `session`. */
+  size: Size | null;
+  /** A draft waiting on his yes, if the morning run wrote one. */
+  prep: Prep | null;
+  prep_at: string | null;
   person: string | null;
   link: string | null;
   source: string | null;
@@ -56,6 +64,21 @@ export interface Item {
   closed_on: string | null;
   updated_at: string;
 }
+
+export type PrepShape = "message" | "comments" | "hold" | "outline";
+export const PREP_SHAPES: readonly PrepShape[] = ["message", "comments", "hold", "outline"];
+
+export interface Prep {
+  shape: PrepShape;
+  target?: string | null;
+  body: string;
+  start?: string | null;
+  end?: string | null;
+  attendees?: string[] | null;
+}
+
+/** An item as every read returns it: in list order, carrying the band it sits in and why. */
+export type RankedItem = Item & Placement;
 
 /**
  * One thing that pointed at an item: a flagged mail, an invite, a saved Slack
@@ -129,6 +152,10 @@ const toItem = (r: DaybookItem): Item => ({
   priority: r.priority,
   ranked_by_hand: r.rankedByHand,
   due: r.due,
+  pressure: (r.pressure as Pressure | null) ?? null,
+  size: (r.size as Size | null) ?? null,
+  prep: (r.prep as Prep | null) ?? null,
+  prep_at: r.prepAt ?? null,
   person: r.person,
   link: r.link,
   source: r.source,
@@ -157,12 +184,16 @@ const toTrigger = (r: DaybookTrigger): Trigger => ({
   seen_at: r.seenAt.toISOString(),
 });
 
+/** Only the seed order for a query; every read that returns items re-sorts them by rank. */
 const byPriority = [sql`${daybookItems.priority} asc nulls last`, asc(daybookItems.firstSeen)];
 
 /* ---------- reads ---------- */
 
-/** Open items, most urgent first. `closedSince` adds whatever was closed or dropped on or after it. */
-export async function listItems(options: { closedSince?: string; all?: boolean } = {}): Promise<Item[]> {
+/**
+ * Open items in list order, each carrying its band and the reason it sits
+ * there. `closedSince` adds whatever was closed or dropped on or after it.
+ */
+export async function listItems(options: { closedSince?: string; all?: boolean } = {}): Promise<RankedItem[]> {
   const db = getDb();
   const where = options.all
     ? undefined
@@ -170,7 +201,7 @@ export async function listItems(options: { closedSince?: string; all?: boolean }
       ? or(eq(daybookItems.status, "open"), gte(daybookItems.closedOn, options.closedSince))
       : eq(daybookItems.status, "open");
   const rows = await db.select().from(daybookItems).where(where).orderBy(...byPriority);
-  return rows.map(toItem);
+  return ranked(rows.map(toItem), todayPT());
 }
 
 /**
@@ -252,7 +283,7 @@ export async function listDays(): Promise<Day[]> {
 }
 
 /** One date, with every item it names or that closed on it. */
-export async function getDay(date: string): Promise<{ day: Day | null; items: Item[] }> {
+export async function getDay(date: string): Promise<{ day: Day | null; items: RankedItem[] }> {
   const db = getDb();
   const [row] = await db.select().from(daybookDays).where(eq(daybookDays.date, date));
   const day = row ? toDay(row) : null;
@@ -266,7 +297,7 @@ export async function getDay(date: string): Promise<{ day: Day | null; items: It
         : eq(daybookItems.closedOn, date),
     )
     .orderBy(...byPriority);
-  return { day, items: rows.map(toItem) };
+  return { day, items: ranked(rows.map(toItem), date) };
 }
 
 /* ---------- item writes ---------- */
@@ -279,6 +310,9 @@ const EDITABLE = [
   "priority",
   "ranked_by_hand",
   "due",
+  "pressure",
+  "size",
+  "prep",
   "person",
   "link",
   "source",
@@ -287,6 +321,32 @@ const EDITABLE = [
 ] as const;
 type Editable = (typeof EDITABLE)[number];
 export type ItemInput = { id: string; updated_at?: string } & Partial<Pick<Item, Editable>>;
+
+function assertPrep(v: unknown): Prep | null {
+  if (v === null) return null;
+  if (typeof v !== "object" || Array.isArray(v)) throw new Error("prep must be an object or null");
+  const p = v as Record<string, unknown>;
+  if (!PREP_SHAPES.includes(p.shape as PrepShape)) throw new Error(`prep.shape must be one of ${PREP_SHAPES.join(", ")}`);
+  if (typeof p.body !== "string" || !p.body.trim()) throw new Error("prep.body must be a non-empty string");
+  const text = (k: string) => {
+    const x = p[k];
+    if (x === undefined || x === null) return null;
+    if (typeof x !== "string") throw new Error(`prep.${k} must be a string or null`);
+    return x;
+  };
+  const attendees = p.attendees;
+  if (attendees != null && (!Array.isArray(attendees) || attendees.some((a) => typeof a !== "string"))) {
+    throw new Error("prep.attendees must be an array of emails or null");
+  }
+  return {
+    shape: p.shape as PrepShape,
+    body: p.body,
+    target: text("target"),
+    start: text("start"),
+    end: text("end"),
+    attendees: (attendees as string[] | null | undefined) ?? null,
+  };
+}
 
 /** Validate caller input and translate it to column names. Unknown fields are ignored. */
 function columnsOf(input: Partial<Pick<Item, Editable>>) {
@@ -326,6 +386,21 @@ function columnsOf(input: Partial<Pick<Item, Editable>>) {
         break;
       case "due":
         out.due = nullableDate(v, key);
+        break;
+      case "pressure":
+        if (v !== null && !PRESSURES.includes(v as Pressure)) {
+          throw new Error(`pressure must be one of ${PRESSURES.join(", ")}, or null`);
+        }
+        out.pressure = v as Pressure | null;
+        break;
+      case "size":
+        if (v !== null && !SIZES.includes(v as Size)) throw new Error(`size must be one of ${SIZES.join(", ")}, or null`);
+        out.size = v as Size | null;
+        break;
+      case "prep":
+        // Writing a draft stamps when, so a later edit to the item can tell the draft is older than it.
+        out.prep = assertPrep(v);
+        out.prepAt = v === null ? null : new Date().toISOString();
         break;
       case "first_seen":
         out.firstSeen = assertDate(v, key);

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "migrate": "tsx scripts/migrate.ts",
-    "daybook-ui": "tsx scripts/daybook-ui.ts"
+    "daybook-ui": "tsx scripts/daybook-ui.ts",
+    "test": "tsx --test src/lib/daybook/rank.test.ts"
   },
   "dependencies": {
     "@awd/auth": "workspace:*",

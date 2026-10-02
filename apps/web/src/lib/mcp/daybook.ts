@@ -66,7 +66,8 @@ const scriptJson = (value: unknown) =>
  */
 async function widgetPage(showLater: boolean) {
   const data = await dayList(showLater);
-  const items = data.items.map(({ id, title, horizon, priority, due, person, link, source }) => ({
+  // Already in rank order. The widget keeps that order and prints `reason` where it used to print a number.
+  const items = data.items.map(({ id, title, horizon, priority, due, person, link, source, band, reason, prep }) => ({
     id,
     title,
     horizon,
@@ -75,6 +76,9 @@ async function widgetPage(showLater: boolean) {
     person,
     link,
     source,
+    band,
+    reason,
+    prep: prep ? prep.shape : null,
   }));
   const mount = `daybook-${Math.random().toString(36).slice(2, 8)}`;
   const commit = process.env.RAILWAY_GIT_COMMIT_SHA ?? "main";
@@ -128,7 +132,42 @@ const itemProperties = {
   kind: { type: "string", description: "task, reply, decision, skip-level" },
   status: { type: "string", enum: ["open", "closed", "dropped"] },
   horizon: { type: "string", enum: ["today", "later"] },
-  priority: { type: ["integer", "null"], description: "Lower is more urgent. Steps of 10." },
+  priority: {
+    type: ["integer", "null"],
+    description:
+      "Hand order inside a band only; lower sorts first. Rank comes from due, pressure and size, so leave " +
+      "this alone and set those instead.",
+  },
+  pressure: {
+    type: ["string", "null"],
+    enum: ["waiting", "meeting", "deadline", "none", null],
+    description:
+      "What happens if he does nothing. waiting: a named person is blocked on him (set person). meeting: " +
+      "a meeting needs it done first (set due to the meeting date). deadline: a date passes (set due). " +
+      "none: nothing happens. Set it on every new item.",
+  },
+  size: {
+    type: ["string", "null"],
+    enum: ["quick", "session", "project", null],
+    description:
+      "quick: under fifteen minutes, one reply or one approval. session: one sitting. project: several " +
+      "sittings or other people. Set it on every new item.",
+  },
+  prep: {
+    type: ["object", "null"],
+    description:
+      "A draft written ahead so the item finishes in one approval. Never sent by anything but his yes. " +
+      "Null clears it.",
+    properties: {
+      shape: { type: "string", enum: ["message", "comments", "hold", "outline"] },
+      target: { type: ["string", "null"], description: "Where it goes: a channel or thread, a mail thread, a doc, a calendar" },
+      body: { type: "string", description: "The draft, in his voice. Comments go one per line, numbered." },
+      start: { type: ["string", "null"], description: "For a hold: ISO start" },
+      end: { type: ["string", "null"], description: "For a hold: ISO end" },
+      attendees: { type: ["array", "null"], items: { type: "string" } },
+    },
+    required: ["shape", "body"],
+  },
   ranked_by_hand: { type: ["string", "null"], description: "Date he last dragged it. Do not change hand-ranked order." },
   due: {
     type: ["string", "null"],
@@ -156,7 +195,10 @@ export const DAYBOOK_TOOLS: ToolDefinition[] = [
   {
     name: "daybook_list",
     description:
-      "Read the Daybook. With no date, returns open items, most urgent first; closed_since adds items " +
+      "Read the Daybook. With no date, returns open items in rank order, each with its band (1 overdue, " +
+      "2 due today, 3 someone waiting, 4 due this week, 5 quick, 6 rest, 7 stale) and a reason clause " +
+      "saying why it sits there. A wrong place means a wrong due, pressure or size; fix that fact rather " +
+      "than the priority. closed_since adds items " +
       "closed or dropped on or after that date, and all returns every item. With a date, returns that " +
       "day's focus, added and closed lists plus every item they name or that closed that day. Each " +
       "answer also carries the triggers on those items, so read this before adding anything.",
