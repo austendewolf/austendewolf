@@ -165,6 +165,11 @@ const itemProperties = {
       start: { type: ["string", "null"], description: "For a hold: ISO start" },
       end: { type: ["string", "null"], description: "For a hold: ISO end" },
       attendees: { type: ["array", "null"], items: { type: "string" } },
+      sent: {
+        type: ["string", "null"],
+        enum: ["unchanged", "edited", null],
+        description: "Set when he approves the draft: unchanged if it went out as written, edited if he rewrote it",
+      },
     },
     required: ["shape", "body"],
   },

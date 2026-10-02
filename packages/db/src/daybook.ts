@@ -80,6 +80,8 @@ export const daybookItems = daybookSchema.table(
       start?: string | null;
       end?: string | null;
       attendees?: string[] | null;
+      /** Set when he approves it: sent as drafted, or after he rewrote it. */
+      sent?: "unchanged" | "edited" | null;
     }>(),
     /** When `prep` was written. A draft older than the item's last edit is stale. */
     prepAt: timestamp("prep_at", { withTimezone: true, mode: "string" }),

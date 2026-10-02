@@ -75,7 +75,10 @@ export interface Prep {
   start?: string | null;
   end?: string | null;
   attendees?: string[] | null;
+  /** Set when he approves it: `unchanged` or `edited`. The Monday review counts these. */
+  sent?: PrepSent | null;
 }
+export type PrepSent = "unchanged" | "edited";
 
 /** An item as every read returns it: in list order, carrying the band it sits in and why. */
 export type RankedItem = Item & Placement;
@@ -338,7 +341,9 @@ function assertPrep(v: unknown): Prep | null {
   if (attendees != null && (!Array.isArray(attendees) || attendees.some((a) => typeof a !== "string"))) {
     throw new Error("prep.attendees must be an array of emails or null");
   }
+  if (p.sent != null && p.sent !== "unchanged" && p.sent !== "edited") throw new Error("prep.sent must be unchanged, edited or null");
   return {
+    sent: (p.sent as PrepSent | null | undefined) ?? null,
     shape: p.shape as PrepShape,
     body: p.body,
     target: text("target"),

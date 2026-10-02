@@ -85,3 +85,12 @@ Phases 1 to 3 settle priority and ship together. Phase 4 and 5 are the pre-work,
 
 - Where the midday and evening sweeps run. The 7:30am run is a scheduled task on this machine; two more of the same is the plain answer unless the server grows a scheduler for phase 11 of `daybook.md`.
 - Whether the Outline shape is worth building in phase 4 or waits for evidence from the three message-shaped drafts.
+- Whether `daybook_show` in Claude chat gets the `next` controls. Phase 5 built the loop in the Claude Code skill only.
+
+## Status on 10/01/2026
+
+Phases 1 to 3 are built on branch `daybook-rank`. Phases 4, 5 and 7 are written into the morning skill and the day-list skill. Migration 0007, the deploy and the phase 6 scheduled task wait on Austen's approval.
+
+The phase 6 task, ready to create as `daybook-passed-cue-sweep` on cron `30 12,17 * * 1-5`:
+
+> Run Austen's passed-cue sweep on the Daybook. Call `daybook_list` and take every open item due today or earlier, plus every `pressure: meeting` item whose meeting on today's work calendar has ended. Skip notes and decisions. For each, search Slack and Hover mail for its person and subject since the cue and read the thread. Evidence it was done closes it with `daybook_close`, dated to the evidence. No evidence re-cues `due` to the next real occurrence of that meeting through `daybook_upsert`, carrying `updated_at`, or leaves it overdue when there is none. Never drop an item for a passed date, and never send or post anything. Report in at most six lines, times in 12-hour PT: what closed and why, what was re-cued to when, and anything unchecked as a question: happened, reschedule, or drop.
