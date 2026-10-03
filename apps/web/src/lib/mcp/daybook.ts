@@ -88,7 +88,7 @@ async function widgetPage(showLater: boolean) {
   // A module the host blocks or never fetches would otherwise leave the widget blank.
   const fallback = `setTimeout(function(){var e=document.getElementById("${mount}");if(e&&!window.Daybook)e.textContent="The day list did not draw, because its module never arrived from jsDelivr."},10000);`;
   return [
-    `<h2 class="sr-only">Daybook day list: ${onToday} on today and ${data.later_count} on later, with done, later, today and drop controls that collect until apply sends them in one message.</h2>`,
+    `<h2 class="sr-only">Daybook day list: ${onToday} on today and ${data.later_count} on later, with done, later and drop controls that collect until apply sends them in one message.</h2>`,
     `<div id="${mount}"></div>`,
     `<script src="${src}"></script>`,
     `<script>${job}${fallback}</script>`,

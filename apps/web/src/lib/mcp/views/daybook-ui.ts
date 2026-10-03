@@ -474,8 +474,9 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
 
     function split() {
       return {
-        today: d.items.filter((i) => i.horizon === "today"),
-        later: d.laterShown ? d.items.filter((i) => i.horizon !== "today") : [],
+        // A later row marked done rises into today, the day it closes on.
+        today: d.items.filter((i) => i.horizon === "today" || (mode === "message" && act[i.id] === "done")),
+        later: d.laterShown ? d.items.filter((i) => i.horizon !== "today" && !(mode === "message" && act[i.id] === "done")) : [],
       };
     }
 
@@ -504,7 +505,7 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
       let acts;
       if (a) acts = pill("undo", "undo", it.id, "Undo: " + it.title, false, off);
       else if (home === "today") acts = pill("later", "later", it.id, "Move to later: " + it.title, false, off) + pill("done", "done", it.id, "Done: " + it.title, true, off);
-      else acts = pill("drop", "drop", it.id, "Drop: " + it.title, false, off) + pill("today", "today", it.id, "Move to today: " + it.title, true, off);
+      else acts = pill("drop", "drop", it.id, "Drop: " + it.title, false, off) + pill("done", "done", it.id, "Done: " + it.title, true, off);
       const cls = "row li" + (a === "done" ? " struck" : "") + (a === "drop" ? " faded" : "") + (busy[it.id] ? " busy" : "");
       return (
         '<div class="' + cls + '" data-id="' + esc(it.id) + '">' +
@@ -549,7 +550,7 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
       if (problem) html += '<div class="banner" role="status">' + esc(problem) + "</div>";
       if (!d.writable) html += '<div class="banner">The server is read-only right now, so the buttons are off.</div>';
       html += '<div class="sect">Today<span class="n' + (n === CAP ? " ok" : n > CAP ? " gap" : "") + '">' + n + " of " + CAP + "</span></div>";
-      html += '<div class="rows">' + (s.today.length ? s.today.map((i) => row(i, "today")).join("") : '<div class="empty">Nothing on today. Pull one up from later.</div>') + "</div>";
+      html += '<div class="rows">' + (s.today.length ? s.today.map((i) => row(i, "today")).join("") : '<div class="empty">Nothing on today.</div>') + "</div>";
       html += '<div class="sect">Later<span class="n">' + (d.laterShown ? s.later.length : d.laterCount) + "</span>" + laterPill(s.later.length) + "</div>";
       if (d.laterShown && s.later.length) html += '<div class="rows"' + (folded ? " hidden" : "") + ">" + s.later.map((i) => row(i, "later")).join("") + "</div>";
       else if (d.laterShown || !d.laterCount) html += '<div class="rows"><div class="empty">Later is empty.</div></div>';
