@@ -1,5 +1,5 @@
 /*
- * The daybook's drawing module: the day list and the notebook flush review,
+ * The daybook's drawing module: the day list and the notebook sync review,
  * drawn the same way everywhere they show up.
  *
  * Three hosts load it. A Claude Code widget (visualize's show_widget) loads it
@@ -9,10 +9,10 @@
  * so a change can be checked in a browser before it ships.
  *
  * The day list runs in one of two modes. In `message` mode a press marks its
- * row and adds to the footer count, and the apply pill sends every change in
- * one message, since each message costs a model turn in Claude Code. In `call`
- * mode a press goes to the server at once through the host's tool call, and
- * the list reloads.
+ * row as sent and sends its own message, which Claude applies. In `call` mode
+ * a press goes to the server at once through the host's tool call, and the
+ * list reloads. Either way a press acts at once. Only the sync review holds
+ * its changes for one write, because there Claude proposes them.
  *
  * Load order does not matter. A page queues work before or after this runs:
  *
@@ -25,7 +25,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "0.5.0";
+  const VERSION = "0.5.1";
   if (window.Daybook) {
     window.Daybook.drain();
     return;
@@ -59,10 +59,9 @@
   const LIST_LEGEND = [["open", "dot", "open"], ["later", "arrow", "later"], ["done", "x", "done"], ["drop", "minus", "dropped"]];
   const LIST_MARK = { open: "dot", later: "arrow", done: "x", drop: "minus" };
   const LIST_SAY = { open: "open", later: "later", done: "done", drop: "dropped" };
-  const COUNT_WORDS = [["done", "done"], ["later", "to later"], ["today", "to today"], ["drop", "dropped"]];
 
-  const FLUSH_LEGEND = [["new", "dot", "new"], ["edit", "pencil", "edit"], ["note", "bolt", "note"], ["decision", "gavel", "decision"], ["done", "x", "done"]];
-  const FLUSH_MARK = { new: "dot", edit: "pencil", note: "bolt", decision: "gavel", done: "x" };
+  const SYNC_LEGEND = [["new", "dot", "new"], ["edit", "pencil", "edit"], ["note", "bolt", "note"], ["decision", "gavel", "decision"], ["done", "x", "done"]];
+  const SYNC_MARK = { new: "dot", edit: "pencil", note: "bolt", decision: "gavel", done: "x" };
   const KINDS = ["new", "edit", "note", "decision", "done"];
   const AS_WORDS = { new: "an action", edit: "an action", note: "a note", decision: "a decision" };
   const ACT = (k) => k === "new" || k === "edit";
@@ -137,6 +136,7 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
 .db .m a,.db .foot a{color:var(--na);text-underline-offset:2px}
 .db .m a:hover,.db .foot a:hover{color:var(--green-shade)}
 .db .acts{display:flex;gap:6px}
+.db .acts .sent{font-family:var(--mono);font-size:11px;line-height:19px;color:var(--na)}
 .db .pill{--c:var(--muted);display:inline-block;box-sizing:border-box;padding:1px 11px;border:1px solid var(--c);border-radius:999px;background:transparent;color:var(--c);font-family:var(--mono);font-size:11px;line-height:17px;white-space:nowrap;text-align:center;transition:background 120ms ease,color 120ms ease}
 .db .pill.go{--c:var(--green-shade)}
 .db .pill:hover,.db .pill:focus-visible{background:color-mix(in srgb,var(--c) 12%,transparent)}
@@ -477,30 +477,12 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
       };
     }
 
-    function changes() {
-      if (!d) return [];
-      const s = split();
-      return s.today.concat(s.later).filter((i) => act[i.id]).map((i) => act[i.id] + " " + i.id);
-    }
-
-    function countText() {
-      if (sent) return "sent";
-      const c = Object.keys(act).map((k) => act[k]);
-      if (!c.length) return "nothing to apply yet";
-      return COUNT_WORDS.map((w) => {
-        const q = c.filter((x) => x === w[0]).length;
-        return q ? q + " " + w[1] : "";
-      })
-        .filter(Boolean)
-        .join(" " + DOT + " ");
-    }
-
     function row(it, home) {
       const a = act[it.id];
       const m = a === "today" ? "open" : a || (home === "today" ? "open" : "later");
       const off = sent || !d.writable || !!busy[it.id];
       let acts;
-      if (a) acts = pill("undo", "undo", it.id, "Undo: " + it.title, false, off);
+      if (a) acts = '<span class="sent">sent</span>';
       else if (home === "today") acts = pill("later", "later", it.id, "Move to later: " + it.title, false, off) + pill("done", "done", it.id, "Done: " + it.title, true, off);
       else acts = pill("drop", "drop", it.id, "Drop: " + it.title, false, off) + pill("done", "done", it.id, "Done: " + it.title, true, off);
       const cls = "row li" + (a === "done" ? " struck" : "") + (a === "drop" ? " faded" : "") + (busy[it.id] ? " busy" : "");
@@ -522,17 +504,14 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
       return pill("show all " + d.laterCount + (mode === "message" ? " " + OUT : ""), "more", "", "Show all of later", false, sent);
     }
 
+    // The list leaves notes and decisions out, and the site's page shows them, so
+    // the link names that site rather than saying "the page", which reads as paper.
     function foot() {
       const n = d.notesCount;
-      const words = n === 1 ? "1 note or decision stays on the page" : n ? n + " notes and decisions stay on the page" : "open the page";
-      let html = '<div class="foot"><a class="notes" href="' + esc(d.page) + '" target="_blank" rel="noopener">' + words + " " + OUT + "</a>";
-      if (mode === "message") {
-        const off = sent || !changes().length;
-        html +=
-          '<span class="count" aria-live="polite">' + esc(countText()) + "</span>" +
-          '<span class="pill apply" role="button" tabindex="0" data-a="apply" aria-disabled="' + (off ? "true" : "false") + '">apply to daybook ' + OUT + "</span>";
-      }
-      return html + "</div>";
+      const site = d.page.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+      const host = site.split("/")[0];
+      const words = n === 1 ? "1 note or decision on " + host : n ? n + " notes and decisions on " + host : site;
+      return '<div class="foot"><a class="notes" href="' + esc(d.page) + '" target="_blank" rel="noopener">' + esc(words) + " " + OUT + "</a></div>";
     }
 
     function render(focus) {
@@ -543,7 +522,6 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
       const s = split();
       const n = s.today.filter((i) => !act[i.id]).length + s.later.filter((i) => act[i.id] === "today").length;
       let html = '<div class="head"><b>Daybook</b><span class="date">' + esc(dayTitle(d.today)) + "</span>" + legend(LIST_LEGEND) + "</div>";
-      if (mode === "message") html += '<div class="hint">presses collect here, and apply sends them in one message</div>';
       if (problem) html += '<div class="banner" role="status">' + esc(problem) + "</div>";
       if (!d.writable) html += '<div class="banner">The server is read-only right now, so the buttons are off.</div>';
       html += '<div class="sect">Today<span class="n' + (n === CAP ? " ok" : n > CAP ? " gap" : "") + '">' + n + " of " + CAP + "</span></div>";
@@ -560,8 +538,9 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
       let el = null;
       if (f.a) el = db.querySelector('[data-a="' + f.a + '"]');
       else {
-        const r = Array.from(db.querySelectorAll(".row.li")).find((x) => x.dataset.id === f.id);
-        el = r && r.querySelector('[role="button"]');
+        // A sent row keeps no controls, so focus moves on to the next row that has one.
+        const rows = Array.from(db.querySelectorAll(".row.li"));
+        for (let i = rows.findIndex((x) => x.dataset.id === f.id); i >= 0 && i < rows.length && !el; i++) el = rows[i].querySelector('[role="button"]');
       }
       if (el) el.focus();
     }
@@ -576,26 +555,24 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
     function say(text) {
       const f = sender(opts);
       if (!f) {
-        problem = "This page cannot send a message, so nothing was applied.";
-        render();
-        return;
+        problem = "This page cannot send a message, so nothing changed.";
+        return false;
       }
-      sent = true;
-      render();
       try {
         f(text);
       } catch (err) {
-        sent = false;
         problem = msgOf(err);
-        render();
+        return false;
       }
+      problem = null;
+      return true;
     }
 
     function press(id, a, kb) {
       if (mode === "message") {
-        if (sent) return;
-        if (a === "undo") delete act[id];
-        else act[id] = a;
+        if (sent || act[id]) return;
+        act[id] = a;
+        if (!say("Daybook: " + a + " " + id + ".")) delete act[id];
         render(kb && { id: id });
         return;
       }
@@ -630,8 +607,9 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
     function showLater(kb) {
       if (mode === "message") {
         if (sent) return;
-        const ch = changes();
-        say(ch.length ? "Daybook changes: " + ch.join("; ") + ". Then show later." : "Daybook: show later.");
+        // A fresh list replaces this one, so this one stops taking presses.
+        sent = say("Daybook: show later.");
+        render();
         return;
       }
       if (typeof opts.load !== "function" || expanding) return;
@@ -668,10 +646,7 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
         folded = !folded;
         render(kb && { a: "fold" });
       } else if (a === "more") showLater(kb);
-      else if (a === "apply") {
-        const ch = changes();
-        if (ch.length && !sent) say("Daybook changes: " + ch.join("; ") + ".");
-      } else if (c.dataset.id != null) press(c.dataset.id, a, kb);
+      else if (c.dataset.id != null) press(c.dataset.id, a, kb);
     });
     keys(db);
 
@@ -689,7 +664,7 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
     };
   }
 
-  // ---- the notebook flush ------------------------------------------------------
+  // ---- the notebook sync -------------------------------------------------------
 
   // The words the edit adds, tinted, found by a longest common subsequence
   // over words.
@@ -726,7 +701,7 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
     return out.join(" ");
   }
 
-  function flush(where, data, opts) {
+  function sync(where, data, opts) {
     opts = opts || {};
     const db = mount(where);
     const dates = String((data && data.dates) || "");
@@ -738,7 +713,7 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
     let openBtn = null;
 
     let html =
-      '<div class="head"><b>Notebook flush</b><span class="date">' + esc(dates) + "</span>" + legend(FLUSH_LEGEND) + "</div>" +
+      '<div class="head"><b>Notebook sync</b><span class="date">' + esc(dates) + "</span>" + legend(SYNC_LEGEND) + "</div>" +
       '<div class="hint">click an icon to change what a line becomes</div><div class="list">';
     let open = false;
     R.forEach((r, ix) => {
@@ -749,7 +724,7 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
         open = true;
         return;
       }
-      if (!r || !FLUSH_MARK[r.k]) throw new Error("row " + (r && r.id) + " has no type the flush knows: " + (r && r.k));
+      if (!r || !SYNC_MARK[r.k]) throw new Error("row " + (r && r.id) + " has no type the sync knows: " + (r && r.k));
       if (!open) {
         html += '<div class="rows">';
         open = true;
@@ -794,7 +769,7 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
       const isEdit = s.k === "edit" && r.old;
       const off = sent ? ' aria-disabled="true"' : "";
       return (
-        '<div><span class="mark k-' + s.k + '" role="button" tabindex="0" data-ix="' + i + '" aria-haspopup="menu" aria-expanded="false" title="' + s.k + ', click to change" aria-label="' + s.k + ', change type"' + off + ">" + icon(FLUSH_MARK[s.k]) + "</span></div>" +
+        '<div><span class="mark k-' + s.k + '" role="button" tabindex="0" data-ix="' + i + '" aria-haspopup="menu" aria-expanded="false" title="' + s.k + ', click to change" aria-label="' + s.k + ', change type"' + off + ">" + icon(SYNC_MARK[s.k]) + "</span></div>" +
         '<div><div class="t" contenteditable="' + (sent ? "false" : "true") + '" spellcheck="false" data-ix="' + i + '">' + (isEdit ? marked(r.old, s.t) : esc(s.t)) + "</div>" +
         (isEdit ? '<div class="was"><span>previously read</span>' + esc(r.old) + "</div>" : "") +
         '<div class="m">' + meta + "</div></div>" +
@@ -852,7 +827,7 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
         .map(
           (k) =>
             '<div role="menuitemradio" tabindex="0" aria-checked="' + (k === s.k) + '" class="k-' + k + '" data-ix="' + i + '" data-k="' + k + '">' +
-            icon(FLUSH_MARK[k]) + k + (k !== s.k && version(r, k) ? '<span class="ready">reworded</span>' : "") + "</div>"
+            icon(SYNC_MARK[k]) + k + (k !== s.k && version(r, k) ? '<span class="ready">reworded</span>' : "") + "</div>"
         )
         .join("");
       const b = btn.getBoundingClientRect();
@@ -898,7 +873,7 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
       for (let i = 0; i < rows.length; i++) draw(i);
       tally();
       submit.setAttribute("aria-disabled", "true");
-      f("Notebook flush confirmed for " + dates + ". Dropped: " + (dropped.join(", ") || "none") + ". Changed: " + (changed.join(" | ") || "none") + ". Keep everything else as proposed.");
+      f("Notebook sync confirmed for " + dates + ". Dropped: " + (dropped.join(", ") || "none") + ". Changed: " + (changed.join(" | ") || "none") + ". Keep everything else as proposed.");
     }
 
     db.addEventListener("input", (e) => {
@@ -969,7 +944,7 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
   function run(job) {
     if (!Array.isArray(job)) return;
     try {
-      const entry = job[0] === "flush" ? flush : job[0] === "list" ? list : null;
+      const entry = job[0] === "sync" ? sync : job[0] === "list" ? list : null;
       if (!entry) throw new Error("no entry point called " + job[0]);
       entry(job[1], job[2], job[3]);
     } catch (err) {
@@ -993,7 +968,7 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
   window.Daybook = {
     version: VERSION,
     list: list,
-    flush: flush,
+    sync: sync,
     drain: drain,
     text: { dueText: dueText, linkLabel: linkLabel, origin: origin, personName: personName, todayPT: todayPT },
   };

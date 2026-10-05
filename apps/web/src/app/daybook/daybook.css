@@ -111,7 +111,10 @@
  * left. The window bleeds past the column on both sides, which lets a day leave
  * the frame without a visible cut.
  */
-.daybook .rail { margin-bottom: 18px; }
+/* Hidden 09/28/2026: the day strip across the top was not earning its place.
+   The markup and the controller's rail rendering stay untouched, so it comes
+   back by deleting the display declaration. */
+.daybook .rail { margin-bottom: 18px; display: none; }
 .daybook .days-vp { position: relative; overflow-x: auto; overflow-y: hidden; margin-inline: -24px; padding-inline: 24px; scrollbar-width: none; overscroll-behavior-x: contain; }
 .daybook .days-vp::-webkit-scrollbar { display: none; }
 .daybook .days-vp::before, .daybook .days-vp::after { content: ''; position: absolute; top: 0; bottom: 0; width: 40px; z-index: 2; pointer-events: none; }

@@ -10,7 +10,9 @@ The daily list lives in one place that austendewolf.com owns. The page, the morn
 
 The list lives in one store. The `daybook` schema is live on the site's database, the four tools answer on the gateway, and the page renders at `/daybook` behind the owner gate. The claude.ai artifact was seeded across on 09/21/2026 and is no longer written; it stays readable for a week and then gets deleted.
 
-The day list draws inside Claude from one module, `plugins/daybook/ui/daybook.js`. Claude chat draws the gateway's MCP Apps view through `daybook_show`, with the module inlined, and each press there applies at once. The desktop Code tab cannot draw that view, so the plugin's `day-list` skill calls `daybook_widget`, which returns a page that loads the module from jsDelivr at the deployed commit. Presses there collect into one message, and the skill applies it. The notebook flush draws from the same module, pinned by a git tag. `docs/daybook-in-claude.md` has the reasoning.
+The `notebook` skill ships from this repository as the `daybook` plugin on the `austendewolf` marketplace, with its examples carrying placeholder names because the repository is public.
+
+The day list draws inside Claude from one module, `plugins/daybook/ui/daybook.js`. Claude chat draws the gateway's MCP Apps view through `daybook_show`, with the module inlined, and each press there applies at once. The desktop Code tab cannot draw that view, so the plugin's `day-list` skill calls `daybook_widget`, which returns a page that loads the module from jsDelivr at the deployed commit. Each press there sends its own message, and the skill applies it. The notebook sync draws from the same module, pinned by a git tag. `docs/daybook-in-claude.md` has the reasoning.
 
 `digest_item` in `~/team-scorecard/scorecard.db` keeps only the kinds the store does not own, and `digest_observation` stays there for the scorecard trends.
 
@@ -45,7 +47,7 @@ The rule for the run: read the list with its triggers, ask whether this thing is
 
 ## Capture surfaces
 
-**Google Tasks** reaches the gateway as `tasks_list`, `tasks_list_tasklists` and `tasks_complete`, on the `tasks` scope. Tasks exposes no created date, so an undated task is dated from the dated heading above it in the source Doc, which the task's `links` array names. This replaced a Chrome scrape that could not run in a scheduled session at all.
+**Google Tasks** reaches the gateway as `tasks_list`, `tasks_list_tasklists` and `tasks_complete`, on the `tasks` scope. The API leaves out every task assigned in a Doc or a Chat space unless `showAssigned` is set, so `tasks_list` always sets it and returns each assignment's surface, link and Doc file id. Tasks exposes no created date, so an undated task is dated from the dated heading above it in the source Doc. This replaced a Chrome scrape that could not run in a scheduled session at all.
 
 **Mail** is a capture surface on both accounts, decided 09/21/2026, with two routes.
 
@@ -116,7 +118,7 @@ The page was ported from an earlier draft of the artifact rather than the versio
 
   The rule that follows: a credential belongs on the server only when it buys an unattended read that the site itself can act on. Google clears that bar, because mail, calendar, Drive and Tasks all feed scheduled work. Slack does not, because its token and cookie expire on a schedule nobody controls and a 7:30am run cannot re-take them. Slack stays in the session.
 
-- **The notebook flows one way.** Austen writes on paper, photographs the page, and the items land here rewritten as actions he approves. Nothing writes back to paper, and a flushed page stops being a list he owes anything to. The `notebook` skill holds the procedure and the notation.
+- **The notebook flows one way.** Austen writes on paper, photographs the page, and the items land here rewritten as actions he approves. Nothing writes back to paper, and a synced page stops being a list he owes anything to. The `notebook` skill holds the procedure and the notation.
 - **Hover content is fine here.** Austen decided on 09/15/2026 that full item titles, including people decisions, live in this database. It is his personal list and the page sits behind authentication.
 
 ## Open decisions

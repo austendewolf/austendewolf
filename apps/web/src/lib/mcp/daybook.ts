@@ -37,8 +37,8 @@ const ids = { type: "array", items: { type: "string" } };
 
 /**
  * What the day list draws. Notes and recorded decisions never become tasks, so
- * they stay on the page and the list only counts them. A decision with a
- * priority is still something to decide, and it stays.
+ * the list only counts them and links to the site's Daybook page, which shows
+ * them. A decision with a priority is still something to decide, and it stays.
  */
 async function dayList(showLater: boolean) {
   const open = await listItems();
@@ -88,7 +88,7 @@ async function widgetPage(showLater: boolean) {
   // A module the host blocks or never fetches would otherwise leave the widget blank.
   const fallback = `setTimeout(function(){var e=document.getElementById("${mount}");if(e&&!window.Daybook)e.textContent="The day list did not draw, because its module never arrived from jsDelivr."},10000);`;
   return [
-    `<h2 class="sr-only">Daybook day list: ${onToday} on today and ${data.later_count} on later, with done, later and drop controls that collect until apply sends them in one message.</h2>`,
+    `<h2 class="sr-only">Daybook day list: ${onToday} on today and ${data.later_count} on later, with done, later and drop controls, each of which sends its own message.</h2>`,
     `<div id="${mount}"></div>`,
     `<script src="${src}"></script>`,
     `<script>${job}${fallback}</script>`,
@@ -99,14 +99,16 @@ const WIDGET_GUIDE = [
   "Pass everything below the line to visualize's show_widget unchanged, as widget_code, with title daybook_day_list " +
     'and loading_messages ["Opening the daybook"]. Call its read_me first if this session has not. Write nothing after the widget.',
   "",
-  'Presses in the widget collect until its apply pill sends them as one message, "Daybook changes: done <id>; later <id>; ' +
-    'today <id>; drop <id>." Apply every change in one pass, then call daybook_widget again and draw the new page:',
+  'Each press in the widget sends its own message, like "Daybook: done <id>." Make the matching call and write ' +
+    "nothing, since the widget already marks the row as sent and a redraw after every press would stack widgets:",
   "- done <id>: daybook_close {id}",
   '- drop <id>: daybook_close {id, status: "dropped"}',
   '- later <id>: daybook_move {id, horizon: "later"}',
   '- today <id>: daybook_move {id, horizon: "today"}',
-  'A message ending "Then show later." or reading "Daybook: show later." asks for the next draw with later: true.',
-  "Today holds three. If the changes leave more than three on it, name them in one line and let Austen pick what comes off.",
+  "If a call fails, name it in one line, then call daybook_widget again and draw the new page.",
+  '"Daybook: show later." asks for a new draw with later: true.',
+  "Today holds three. After a today press, read the open list with daybook_list {triggers: false}; if more than three " +
+    "sit on today, name them in one line and let Austen pick what comes off.",
   "",
   "---",
 ].join("\n");
@@ -200,7 +202,9 @@ export const DAYBOOK_TOOLS: ToolDefinition[] = [
   {
     name: "daybook_list",
     description:
-      "Read the Daybook. With no date, returns open items in rank order, each with its band (1 overdue, " +
+      "Read the Daybook for your own reasoning; it draws nothing. Never answer Austen from it when he " +
+      "mentions the daybook or his list: draw it first with daybook_widget (Claude Code) or daybook_show " +
+      "(Claude chat). With no date, returns open items in rank order, each with its band (1 overdue, " +
       "2 due today, 3 someone waiting, 4 due this week, 5 quick, 6 rest, 7 stale) and a reason clause " +
       "saying why it sits there. A wrong place means a wrong due, pressure or size; fix that fact rather " +
       "than the priority. closed_since adds items " +
@@ -314,7 +318,9 @@ export const DAYBOOK_TOOLS: ToolDefinition[] = [
     name: "daybook_show",
     description:
       "Show Austen his day list in Claude chat, drawn as this server's view: today's items and later, " +
-      "with done, later, today and drop on each row. Claude Code draws nothing from this tool, so call " +
+      "with done, later, today and drop on each row. Call it first whenever he mentions the daybook or his " +
+      "list in any form, including \"let's talk about the daybook\", and discuss only after it is drawn. " +
+      "Claude Code draws nothing from this tool, so call " +
       "daybook_widget there instead. Later shows as a count unless later is true; pass it only when he " +
       "asks for later or the whole list. To read the list for your own reasoning, call daybook_list.",
     inputSchema: {
@@ -330,8 +336,10 @@ export const DAYBOOK_TOOLS: ToolDefinition[] = [
     name: "daybook_widget",
     description:
       "Show Austen his day list in Claude Code. Returns a page to pass unchanged to visualize's show_widget, " +
-      "and says how to apply the one message its controls send. Use it whenever he asks to see or work his " +
-      "list in Claude Code; Claude chat uses daybook_show. Later shows as a count unless later is true.",
+      "and says how to apply the message each press sends. Call it first whenever he mentions the daybook " +
+      "or his list in any form, including \"let's talk about the daybook\", and discuss only after it is " +
+      "drawn. Write nothing after the widget unless he asked a question. Claude chat uses daybook_show. " +
+      "Later shows as a count unless later is true.",
     inputSchema: {
       type: "object",
       properties: {

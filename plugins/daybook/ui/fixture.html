@@ -35,7 +35,7 @@
 <section class="frame"><h2>2. Claude Code widget, later as a count, four on today</h2><div id="demo-count"></div></section>
 <section class="frame"><h2>3. The site's view, presses call the server</h2><div id="demo-call"></div></section>
 <section class="frame"><h2>4. Read-only and empty</h2><div id="demo-empty"></div></section>
-<section class="frame"><h2>5. Notebook flush</h2><div id="demo-flush"></div></section>
+<section class="frame"><h2>5. Notebook sync</h2><div id="demo-sync"></div></section>
 <section class="frame"><h2>Messages sent</h2><pre id="log"></pre></section>
 
 <script>
@@ -145,7 +145,7 @@
 
   window.DAYBOOK.push(["list", "demo-empty", { today: ptToday(), writable: false, later_shown: true, later_count: 0, notes_count: 1, items: [] }]);
 
-  window.DAYBOOK.push(["flush", "demo-flush", {
+  window.DAYBOOK.push(["sync", "demo-sync", {
     dates: "09/28 and 09/29",
     rows: [
       ["Actions"],

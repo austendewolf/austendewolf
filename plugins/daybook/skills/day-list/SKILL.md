@@ -1,6 +1,6 @@
 ---
 name: day-list
-description: Draw Austen's Daybook day list in Claude Code and apply what he presses on it. Use whenever he asks to see or work his list, says "my list", "day list", "what's on today", "what's on my plate", "show my daybook" or "show later", when he says "next" or "work the list", and whenever a message arrives that starts "Daybook changes:" or reads "Daybook: show later.", because those come from the widget this skill draws.
+description: Draw Austen's Daybook day list in Claude Code and apply what he presses on it. Use whenever he mentions the daybook or his list in any form, including "let's talk about the daybook", "my list", "day list", "what's on today", "what's on my plate" and "show later", drawing it first and discussing after. Use it when he says "next" or "work the list". Use it also whenever a message arrives that starts "Daybook:" or "Daybook changes:", because those come from the widget this skill draws.
 ---
 
 # Day list
@@ -18,11 +18,9 @@ Claude chat draws the site's own view of the list through `daybook_show`, where 
 
 ## Applying what he presses
 
-Presses collect in the widget until he presses apply, which sends one message:
+Each press sends its own message the moment he makes it, and the widget marks that row as sent:
 
-    Daybook changes: done <id>; later <id>; today <id>; drop <id>.
-
-Apply every change in one pass, in the order given:
+    Daybook: done <id>.
 
 | Change | Call |
 |---|---|
@@ -31,11 +29,15 @@ Apply every change in one pass, in the order given:
 | `later <id>` | `daybook_move {id, horizon: "later"}` |
 | `today <id>` | `daybook_move {id, horizon: "today"}` |
 
-Then draw the list again. A message that ends "Then show later." or reads "Daybook: show later." draws it with `later: true`.
+Make the call and write nothing. The widget already shows the change, and drawing the list again after every press would stack one widget per press. Presses made while you work arrive as more messages; apply each in the order it came.
 
-When a call fails, apply the rest anyway, draw the list again, and name the change that failed in one line before the widget.
+"Daybook: show later." draws the list again with `later: true`.
 
-**Today holds three.** When the changes leave more than three on today, name the extras in one line and let him pick which come off. Claude never picks.
+When a call fails, name it in one line and draw the list again, so the widget on screen matches the store.
+
+A message that starts "Daybook changes:" comes from a widget drawn before 0.5.1, which collected presses behind an apply button: `Daybook changes: done <id>; later <id>.` Apply every change in it the same way, then draw the list again.
+
+**Today holds three.** Nothing redraws after a press, so check the count yourself: after a today press, read the open list with `daybook_list` (`triggers: false`). When more than three sit on today, name them in one line and let him pick which come off. Claude never picks.
 
 ## Working it with "next"
 

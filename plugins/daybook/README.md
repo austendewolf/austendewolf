@@ -7,14 +7,14 @@ writes only what you approve. Your open Google Tasks come in with the page,
 including anything someone assigned you in a Doc or a Chat space.
 
 The `day-list` skill draws that list in Claude Code, with done, later, today
-and drop on each row. Presses collect until you apply them, and then go out as
-one message, since every message costs a model turn.
+and drop on each row. Each press goes out as its own message, and the skill
+applies it.
 
 ## Why it exists
 
 Paper is good for thinking and bad for remembering. A digital list is the
 reverse. This moves items from the first to the second once a day and never the
-other way, so a flushed page owes you nothing and can be recycled.
+other way, so a synced page owes you nothing and can be recycled.
 
 Three rules do most of the work:
 
@@ -32,7 +32,7 @@ relax them by feel.
     claude plugin marketplace add austendewolf/austendewolf
     claude plugin install daybook@austendewolf
 
-Then send a photo of a page, say "flush my notebook", or ask for your list.
+Then send a photo of a page, say "sync my notebook", or ask for your list.
 
 ## What it needs
 
@@ -49,9 +49,9 @@ the list call sets `showAssigned`, so your server has to set it.
 
 Both skills draw through visualize's `show_widget`, and both widgets load one
 module, `ui/daybook.js`, from jsDelivr: the day list at the commit its server
-names, and the flush at a git tag. `ui/fixture.html` draws every state from
+names, and the sync review at a git tag. `ui/fixture.html` draws every state from
 invented data, so a change to the look can be checked in a browser first.
-Without a widget tool, the flush proposal reads fine as a table in the
+Without a widget tool, the sync proposal reads fine as a table in the
 transcript.
 
 ## What it does not do

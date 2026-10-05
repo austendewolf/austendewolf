@@ -523,6 +523,14 @@ export async function respondToEvent(
   return { id: event.id, summary, responseStatus: response, changed: true };
 }
 
+/** Where a task assigned to this account came from: a Doc or a Chat space. */
+interface TaskAssignment {
+  surfaceType?: string;
+  linkToTask?: string;
+  driveResourceInfo?: { driveFileId?: string };
+  spaceInfo?: { space?: string };
+}
+
 export const TOOLS: ToolDefinition[] = [
   {
     name: "gmail_search",
@@ -1804,9 +1812,10 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "tasks_list",
     description:
-      "Open tasks on a list, the default list unless one is named. Each carries its links, which is " +
-      "how a task assigned inside a Google Doc names the doc it came from. Google Tasks records no " +
-      "created date, so `updated` is the only timestamp and it moves on every edit.",
+      "Open tasks on a list, the default list unless one is named, including the ones assigned to you " +
+      "in a Google Doc or a Chat space. An assigned task carries `assignment`: the surface it came from, " +
+      "a link to the assignment itself, and the Doc's file id or the space's name. Google Tasks records " +
+      "no created date, so `updated` is the only timestamp and it moves on every edit.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1820,7 +1829,7 @@ export const TOOLS: ToolDefinition[] = [
     run: async (a) => {
       const list = a.tasklist === undefined ? "@default" : String(a.tasklist);
       const completed = Boolean(a.show_completed);
-      const data = await api<{ items?: Array<Record<string, unknown>> }>(
+      const data = await api<{ items?: Array<Record<string, unknown> & { assignmentInfo?: TaskAssignment }> }>(
         String(a.account),
         "GET",
         `${TASKS}/lists/${seg(list)}/tasks`,
@@ -1830,6 +1839,8 @@ export const TOOLS: ToolDefinition[] = [
             showCompleted: completed,
             // Asking for completed tasks without this returns none of them.
             showHidden: completed,
+            // Tasks assigned in a Doc or a Chat space are left out unless this is set.
+            showAssigned: true,
           },
         },
       );
@@ -1844,6 +1855,13 @@ export const TOOLS: ToolDefinition[] = [
           updated: t.updated,
           parent: t.parent,
           links: t.links,
+          web_link: t.webViewLink,
+          assignment: t.assignmentInfo && {
+            surface: t.assignmentInfo.surfaceType,
+            link: t.assignmentInfo.linkToTask,
+            file_id: t.assignmentInfo.driveResourceInfo?.driveFileId,
+            space: t.assignmentInfo.spaceInfo?.space,
+          },
         })),
       };
     },
