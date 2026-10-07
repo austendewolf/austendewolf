@@ -138,8 +138,7 @@ ${DAYBOOK_UI_JS}
 
   request("ui/initialize", {
     protocolVersion: "2026-01-26",
-    capabilities: {},
-    clientInfo: { name: "Daybook", version: "1.0.0" },
+    appInfo: { name: "Daybook", version: "1.0.0" },
     appCapabilities: { availableDisplayModes: ["inline"] }
   }).then(function (r) {
     applyContext((r && r.hostContext) || {});
