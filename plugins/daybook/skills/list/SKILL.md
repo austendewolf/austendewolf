@@ -18,9 +18,9 @@ Claude chat draws the site's own view of the list through `daybook_show`, where 
 
 ## Applying what he presses
 
-Each press sends its own message the moment he makes it, and the widget marks that row as sent:
+The Code tab puts a press in his message box rather than sending it, and each press replaces what the box held. So every press writes one message carrying all the presses so far, the row reads "in message", and he sends it with return:
 
-    Daybook: done <id>.
+    Daybook: done <id>; later <id>.
 
 | Change | Call |
 |---|---|
@@ -29,9 +29,9 @@ Each press sends its own message the moment he makes it, and the widget marks th
 | `later <id>` | `daybook_move {id, horizon: "later"}` |
 | `today <id>` | `daybook_move {id, horizon: "today"}` |
 
-Make the call, then draw the list again through Drawing it above, so the answer to every press is the list as the store now holds it. Write nothing else. Presses made while you work arrive together in one message; apply each in the order it came, then draw once. Pass `later: true` on that draw when the list he pressed on showed later.
+Make each call in the order given, then draw the list again once through Drawing it above, so the answer is the list as the store now holds it. Write nothing else. Pass `later: true` on that draw when the list he pressed on showed later.
 
-"Daybook: show later." draws the list again with `later: true`.
+"Daybook: show later." draws the list again with `later: true`, and so does a message ending "Then show later." after its changes are applied.
 
 When a call fails, name it in one line before the new list.
 

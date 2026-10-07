@@ -12,7 +12,7 @@ The list lives in one store. The `daybook` schema is live on the site's database
 
 The `notebook` skill ships from this repository as the `daybook` plugin on the `austendewolf` marketplace, with its examples carrying placeholder names because the repository is public.
 
-The day list draws inside Claude from one module, `plugins/daybook/ui/daybook.js`. Claude chat draws the gateway's MCP Apps view through `daybook_show`, with the module inlined, and each press there applies at once. The desktop Code tab cannot draw that view, so the plugin's `list` skill calls `daybook_widget`, which returns a page that loads the module from jsDelivr at the deployed commit. Each press there sends its own message, and the skill applies it. The notebook sync draws from the same module, pinned by a git tag. `docs/daybook-in-claude.md` has the reasoning.
+The day list draws inside Claude from one module, `plugins/daybook/ui/daybook.js`. Claude chat draws the gateway's MCP Apps view through `daybook_show`, with the module inlined, and each press there applies at once. The desktop Code tab cannot draw that view, so the plugin's `list` skill calls `daybook_widget`, which returns a page that loads the module from jsDelivr at the deployed commit. Each press there writes every press so far into one message in the compose box, Austen sends it with return, and the skill applies it. The notebook sync draws from the same module, pinned by a git tag. `docs/daybook-in-claude.md` has the reasoning.
 
 `digest_item` in `~/team-scorecard/scorecard.db` keeps only the kinds the store does not own, and `digest_observation` stays there for the scorecard trends.
 

@@ -46,7 +46,7 @@ counts them.
 |---|---|---|
 | Claude Code, desktop Code tab | Draws nothing, for the reasons below | Draws today |
 | Claude chat | Should draw, and step 9 checks it | Not needed there |
-| A press | Calls the server from inside the view | Sends its own message, and Claude applies it |
+| A press | Calls the server from inside the view | Fills the compose box with every press so far, and Claude applies them once he sends it |
 | Each draw | Costs nothing, because the host fetches the page | Claude writes a short page out again |
 
 The desktop app's code, read on 09/30/2026, blocks the site's view in the Code
@@ -54,8 +54,12 @@ tab twice. It draws views from servers configured in Claude Code only while an
 Anthropic feature flag is on, and the flag is off here. With the flag on, it
 still refuses every tool call such a view makes.
 
-In the Code tab each press sends its own message, marks its row as sent, and
-costs a model turn. Presses there collected behind an apply pill until
+In the Code tab a widget's message lands in the compose box instead of
+sending, and each one replaces what the box held (desktop app code, read on
+10/07/2026). The host also drops a message silently when it saw its own click
+or keypress in the 5.25 seconds before the press. So each press writes one
+message carrying every press so far, its row reads "in message", and Austen
+sends the lot with return, which costs one model turn. Presses there collected behind an apply pill until
 09/30/2026, when that step moved to the sync alone, where Claude proposes
 changes from a page and Austen confirms them. A press on the list is already
 his decision. In Claude chat the view calls the server itself, so each press

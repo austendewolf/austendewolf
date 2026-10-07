@@ -7,8 +7,8 @@ writes only what you approve. Your open Google Tasks come in with the page,
 including anything someone assigned you in a Doc or a Chat space.
 
 The `list` skill draws that list in Claude Code, with done, later, today
-and drop on each row. Each press goes out as its own message, and the skill
-applies it.
+and drop on each row. Presses collect in one message in your message box,
+you send it with return, and the skill applies them.
 
 ## Why it exists
 

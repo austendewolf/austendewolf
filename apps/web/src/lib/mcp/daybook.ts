@@ -112,7 +112,7 @@ async function widgetPage(showLater: boolean) {
   // A module the host blocks or never fetches would otherwise leave the widget blank.
   const fallback = `setTimeout(function(){var e=document.getElementById("${mount}");if(e&&!window.Daybook)e.textContent="The day list did not draw, because its module never arrived from jsDelivr."},10000);`;
   return [
-    `<h2 class="sr-only">Daybook day list: ${onToday} on today and ${data.later_count} on later, with done, later and drop controls, each of which sends its own message.</h2>`,
+    `<h2 class="sr-only">Daybook day list: ${onToday} on today and ${data.later_count} on later, with done, later and drop controls. Each press writes every press so far into the message box, and Austen sends it with return.</h2>`,
     `<div id="${mount}"></div>`,
     `<script src="${src}"></script>`,
     `<script>${job}${fallback}</script>`,
@@ -123,15 +123,16 @@ const WIDGET_GUIDE = [
   "Pass everything below the line to visualize's show_widget unchanged, as widget_code, with title daybook_day_list " +
     'and loading_messages ["Opening the daybook"]. Call its read_me first if this session has not. Write nothing after the widget.',
   "",
-  'Each press in the widget sends its own message, like "Daybook: done <id>." Make the matching call, then call ' +
-    "daybook_widget again and draw the new page as the whole answer. When one message carries several presses, apply " +
-    "them in order and draw once. Pass later: true when the list he pressed on showed later:",
+  "Each press in the widget writes one message carrying every press so far into Austen's message box, and he sends it " +
+    'with return: "Daybook: done <id>." or "Daybook: done <id>; later <id>." Make each matching call in order, then call ' +
+    "daybook_widget again and draw the new page once, as the whole answer. Pass later: true when the list he pressed on " +
+    "showed later:",
   "- done <id>: daybook_close {id}",
   '- drop <id>: daybook_close {id, status: "dropped"}',
   '- later <id>: daybook_move {id, horizon: "later"}',
   '- today <id>: daybook_move {id, horizon: "today"}',
   "If a call fails, name it in one line before the new page.",
-  '"Daybook: show later." asks for a new draw with later: true.',
+  '"Daybook: show later.", or a message ending "Then show later.", asks for a new draw with later: true.',
   "Today holds three. After a today press, read the open list with daybook_list {triggers: false}; if more than three " +
     "sit on today, name them in one line before the new page and let Austen pick what comes off.",
   "",

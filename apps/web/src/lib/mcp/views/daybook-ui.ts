@@ -12,10 +12,13 @@ export const DAYBOOK_UI_JS = `/*
  * so a change can be checked in a browser before it ships.
  *
  * The day list runs in one of two modes. In \`message\` mode a press marks its
- * row as sent and sends its own message, which Claude applies. In \`call\` mode
- * a press goes to the server at once through the host's tool call, and the
- * list reloads. Either way a press acts at once. Only the sync review holds
- * its changes for one write, because there Claude proposes them.
+ * row and writes every press so far into one message, which Claude applies.
+ * The Code tab puts that message in Austen's compose box rather than sending
+ * it, and each write replaces the box, so the message always carries every
+ * press and he sends it with return. In \`call\` mode a press goes to the
+ * server at once through the host's tool call, and the list reloads. Only the
+ * sync review holds its changes for one write, because there Claude proposes
+ * them.
  *
  * Load order does not matter. A page queues work before or after this runs:
  *
@@ -28,7 +31,7 @@ export const DAYBOOK_UI_JS = `/*
 (function () {
   "use strict";
 
-  const VERSION = "0.5.1";
+  const VERSION = "0.5.2";
   if (window.Daybook) {
     window.Daybook.drain();
     return;
@@ -456,6 +459,8 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
     const mode = opts.mode === "call" ? "call" : "message";
     let d = null;
     let act = {};
+    // Press order, which is the order Claude applies them in.
+    let order = [];
     let busy = {};
     let sent = false;
     let folded = false;
@@ -469,6 +474,7 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
         if (act[i.id]) kept[i.id] = act[i.id];
       });
       act = kept;
+      order = order.filter((id) => kept[id]);
       problem = null;
     }
 
@@ -485,7 +491,7 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
       const m = a === "today" ? "open" : a || (home === "today" ? "open" : "later");
       const off = sent || !d.writable || !!busy[it.id];
       let acts;
-      if (a) acts = '<span class="sent">sent</span>';
+      if (a) acts = '<span class="sent">' + (mode === "message" ? "in message" : "sent") + "</span>";
       else if (home === "today") acts = pill("later", "later", it.id, "Move to later: " + it.title, false, off) + pill("done", "done", it.id, "Done: " + it.title, true, off);
       else acts = pill("drop", "drop", it.id, "Drop: " + it.title, false, off) + pill("done", "done", it.id, "Done: " + it.title, true, off);
       const cls = "row li" + (a === "done" ? " struck" : "") + (a === "drop" ? " faded" : "") + (busy[it.id] ? " busy" : "");
@@ -527,6 +533,7 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
       let html = '<div class="head"><b>Daybook</b><span class="date">' + esc(dayTitle(d.today)) + "</span>" + legend(LIST_LEGEND) + "</div>";
       if (problem) html += '<div class="banner" role="status">' + esc(problem) + "</div>";
       if (!d.writable) html += '<div class="banner">The server is read-only right now, so the buttons are off.</div>';
+      if (mode === "message" && (order.length || sent)) html += '<div class="hint" role="status">' + (order.length ? "Every press so far" : "Show later") + " is in your message box. Press return to send.</div>";
       html += '<div class="sect">Today<span class="n' + (n === CAP ? " ok" : n > CAP ? " gap" : "") + '">' + n + " of " + CAP + "</span></div>";
       html += '<div class="rows">' + (s.today.length ? s.today.map((i) => row(i, "today")).join("") : '<div class="empty">Nothing on today.</div>') + "</div>";
       html += '<div class="sect">Later<span class="n">' + (d.laterShown ? s.later.length : d.laterCount) + "</span>" + laterPill(s.later.length) + "</div>";
@@ -571,11 +578,21 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
       return true;
     }
 
+    // The host replaces the compose box on every message, so each one carries
+    // every press so far: "done <id>; later <id>".
+    function changes() {
+      return order.map((id) => act[id] + " " + id).join("; ");
+    }
+
     function press(id, a, kb) {
       if (mode === "message") {
         if (sent || act[id]) return;
         act[id] = a;
-        if (!say("Daybook: " + a + " " + id + ".")) delete act[id];
+        order.push(id);
+        if (!say("Daybook: " + changes() + ".")) {
+          delete act[id];
+          order.pop();
+        }
         render(kb && { id: id });
         return;
       }
@@ -611,7 +628,7 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
       if (mode === "message") {
         if (sent) return;
         // A fresh list replaces this one, so this one stops taking presses.
-        sent = say("Daybook: show later.");
+        sent = say(order.length ? "Daybook: " + changes() + ". Then show later." : "Daybook: show later.");
         render();
         return;
       }
