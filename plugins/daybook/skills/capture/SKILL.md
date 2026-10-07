@@ -1,5 +1,5 @@
 ---
-name: notebook
+name: capture
 description: Turn a photo of Austen's handwritten daily notebook page, and the Google Tasks people assign him in Docs and Chat, into Daybook items written as actions, enforce the three-item cap on today, and expire stale items. Use whenever he sends a picture of a notebook page, says "here's yesterday's page", "sync my notebook", "flush my notebook", "capture this page", "pull my Google Tasks", or asks to reconcile the written list with the digital one.
 ---
 
@@ -95,7 +95,7 @@ Partial evidence resolves to Augments, with the source saying what moved, never 
 
    Every row gets a square checkbox, checked by default. A green check means the line goes into the Daybook, and an empty box means it stays out. Mark merges on the row itself. One submit button sends the whole decision back through `sendPrompt`, with skipped ids and any rewording he typed into a row, as `Notebook sync confirmed for <dates>. Dropped: <ids>. Changed: <entries>. Keep everything else as proposed.` A changed entry reads `id: text` when he reworded it, and `id (note to new, waiting, quick, due 2026-10-05): text` when he retyped it. Nothing is written to the Daybook before that submit arrives. When he answers in text instead, take "skip 3, 7" or a reworded line the same way.
 6. Write only what he kept, each row as the type he left it on, in one `daybook_upsert` batch: new actions, notes and decisions as new items, Augments as edits carrying `updated_at`, Duplicates as a trigger on the existing item, and closures through `daybook_close` on the evidence date. Every item carries a trigger for where it came from: `notebook` for a page line, `tasks` with the account and task id for a Google Task, and both when the two merged. Skipped lines get no row at all, because a skipped line means no. A skipped Augments leaves the existing item exactly as it was.
-7. Draw the day list with Later open, through the `day-list` skill, and ask him to pick today's three on it. Claude never picks them.
+7. Draw the day list with Later open, through the `list` skill, and ask him to pick today's three on it. Claude never picks them.
 8. Tell him the page is synced. He can recycle it.
 
 ## The shape of an item

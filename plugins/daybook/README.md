@@ -6,7 +6,7 @@ something you could start, checks it against the list you already have, and
 writes only what you approve. Your open Google Tasks come in with the page,
 including anything someone assigned you in a Doc or a Chat space.
 
-The `day-list` skill draws that list in Claude Code, with done, later, today
+The `list` skill draws that list in Claude Code, with done, later, today
 and drop on each row. Each press goes out as its own message, and the skill
 applies it.
 
@@ -65,7 +65,7 @@ approve the line.
 
 ## Notation
 
-`skills/notebook/SKILL.md` carries the full procedure. The marks it reads:
+`skills/capture/SKILL.md` carries the full procedure. The marks it reads:
 
 | Mark | Meaning |
 |---|---|

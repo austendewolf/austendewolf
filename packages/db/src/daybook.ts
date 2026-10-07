@@ -119,6 +119,8 @@ export const daybookDays = daybookSchema.table("days", {
   focus: text("focus").array().default(sql`'{}'::text[]`).notNull(),
   added: text("added").array().default(sql`'{}'::text[]`).notNull(),
   closed: text("closed").array().default(sql`'{}'::text[]`).notNull(),
+  /** Items he moved from today to later on this date, which filling today leaves alone. */
+  deferred: text("deferred").array().default(sql`'{}'::text[]`).notNull(),
   /**
    * Meeting load the page recorded, plus `cal`: the day's drawn shape, kept so
    * an earlier date redraws what that day actually looked like instead of

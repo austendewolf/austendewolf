@@ -1,5 +1,5 @@
 ---
-name: day-list
+name: list
 description: Draw Austen's Daybook day list in Claude Code and apply what he presses on it. Use whenever he mentions the daybook or his list in any form, including "let's talk about the daybook", "my list", "day list", "what's on today", "what's on my plate" and "show later", drawing it first and discussing after. Use it when he says "next" or "work the list". Use it also whenever a message arrives that starts "Daybook:" or "Daybook changes:", because those come from the widget this skill draws.
 ---
 
@@ -29,15 +29,15 @@ Each press sends its own message the moment he makes it, and the widget marks th
 | `later <id>` | `daybook_move {id, horizon: "later"}` |
 | `today <id>` | `daybook_move {id, horizon: "today"}` |
 
-Make the call and write nothing. The widget already shows the change, and drawing the list again after every press would stack one widget per press. Presses made while you work arrive as more messages; apply each in the order it came.
+Make the call, then draw the list again through Drawing it above, so the answer to every press is the list as the store now holds it. Write nothing else. Presses made while you work arrive together in one message; apply each in the order it came, then draw once. Pass `later: true` on that draw when the list he pressed on showed later.
 
 "Daybook: show later." draws the list again with `later: true`.
 
-When a call fails, name it in one line and draw the list again, so the widget on screen matches the store.
+When a call fails, name it in one line before the new list.
 
 A message that starts "Daybook changes:" comes from a widget drawn before 0.5.1, which collected presses behind an apply button: `Daybook changes: done <id>; later <id>.` Apply every change in it the same way, then draw the list again.
 
-**Today holds three.** Nothing redraws after a press, so check the count yourself: after a today press, read the open list with `daybook_list` (`triggers: false`). When more than three sit on today, name them in one line and let him pick which come off. Claude never picks.
+**Today holds three.** After a today press, read the open list with `daybook_list` (`triggers: false`). When more than three sit on today, name them in one line before the new list and let him pick which come off. Claude never picks.
 
 ## Working it with "next"
 

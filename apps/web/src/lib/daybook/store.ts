@@ -111,6 +111,8 @@ export interface Day {
   focus: string[];
   added: string[];
   closed: string[];
+  /** Moved from today to later on this date, so filling today skips them. */
+  deferred: string[];
   /** `cal` is the day's drawn shape, kept so an earlier date redraws itself rather than today. */
   load: {
     meetings_h: number;
@@ -172,6 +174,7 @@ const toDay = (r: DaybookDay): Day => ({
   focus: r.focus,
   added: r.added,
   closed: r.closed,
+  deferred: r.deferred,
   load: r.load ?? null,
   updated_at: r.updatedAt,
 });
@@ -502,8 +505,13 @@ export async function patchItems(patches: Record<string, Partial<Pick<Item, Edit
 
 /* ---------- day writes ---------- */
 
-type DayArray = "focus" | "added" | "closed";
-const column = { focus: daybookDays.focus, added: daybookDays.added, closed: daybookDays.closed };
+type DayArray = "focus" | "added" | "closed" | "deferred";
+const column = {
+  focus: daybookDays.focus,
+  added: daybookDays.added,
+  closed: daybookDays.closed,
+  deferred: daybookDays.deferred,
+};
 
 /** Append an id to one of a day's lists, once, creating the day if it has no row. */
 function addTo(tx: Tx, date: string, list: DayArray, id: string) {
@@ -576,7 +584,7 @@ export async function reopenItem(id: string, date: string): Promise<{ item: Item
   });
 }
 
-/** Move an item between today and later, keeping that day's `focus` in step. */
+/** Move an item between today and later, keeping that day's `focus` and `deferred` in step. */
 export async function moveItem(id: string, horizon: Horizon, date: string): Promise<{ item: Item; day: Day | null }> {
   return getDb().transaction(async (tx) => {
     const [row] = await tx
@@ -585,8 +593,13 @@ export async function moveItem(id: string, horizon: Horizon, date: string): Prom
       .where(eq(daybookItems.id, id))
       .returning();
     if (!row) throw new Error(`no item ${id}`);
-    if (horizon === "today") await addTo(tx, date, "focus", id);
-    else await removeFrom(tx, date, "focus", id);
+    if (horizon === "today") {
+      await addTo(tx, date, "focus", id);
+      await removeFrom(tx, date, "deferred", id);
+    } else {
+      await removeFrom(tx, date, "focus", id);
+      await addTo(tx, date, "deferred", id);
+    }
     return { item: toItem(row), day: await dayRow(tx, date) };
   });
 }

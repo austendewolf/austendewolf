@@ -48,7 +48,7 @@ else, decide whether it is a page from the handwritten notebook:
   no dated heading is not a day page. Read it normally and ignore the rest of
   this notice.
 
-If it is a day page, invoke the `daybook:notebook` skill with the Skill tool and follow
+If it is a day page, invoke the `daybook:capture` skill with the Skill tool and follow
 it. Do not parse the page from memory of the notation, and do not write
 anything to the Daybook before the writer has seen and corrected the drafted lines.
 """

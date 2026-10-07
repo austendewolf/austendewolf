@@ -11,8 +11,10 @@ import {
   triggersFor,
   upsertItems,
   type ItemInput,
+  type RankedItem,
   type TriggerInput,
 } from "@/lib/daybook/store";
+import { BAND } from "@/lib/daybook/rank";
 import type { ToolDefinition } from "./google";
 import { DAYBOOK_VIEW_URI } from "./views/daybook";
 
@@ -35,14 +37,36 @@ function requireWrites(tool: string): void {
 const date = { type: "string", description: "YYYY-MM-DD, Pacific" };
 const ids = { type: "array", items: { type: "string" } };
 
+const TODAY_HOLDS = 3;
+
+const isAction = (i: RankedItem) => i.kind !== "note" && !(i.kind === "decision" && i.priority === null);
+
+/**
+ * Top today back up to three from the head of later, in rank order. It skips
+ * stale items, and anything he moved off today on this date, so a push to
+ * later is never undone by the next draw.
+ */
+async function fillToday() {
+  const date = todayPT();
+  const actions = (await listItems()).filter(isAction);
+  const room = TODAY_HOLDS - actions.filter((i) => i.horizon === "today").length;
+  if (room <= 0) return;
+  const deferred = new Set((await getDay(date)).day?.deferred ?? []);
+  const pull = actions
+    .filter((i) => i.horizon !== "today" && i.band !== BAND.stale && !deferred.has(i.id))
+    .slice(0, room);
+  for (const i of pull) await moveItem(i.id, "today", date);
+}
+
 /**
  * What the day list draws. Notes and recorded decisions never become tasks, so
  * the list only counts them and links to the site's Daybook page, which shows
  * them. A decision with a priority is still something to decide, and it stays.
  */
 async function dayList(showLater: boolean) {
+  if (WRITES_ALLOWED) await fillToday();
   const open = await listItems();
-  const actions = open.filter((i) => i.kind !== "note" && !(i.kind === "decision" && i.priority === null));
+  const actions = open.filter(isAction);
   const today = actions.filter((i) => i.horizon === "today");
   return {
     today: todayPT(),
@@ -99,16 +123,17 @@ const WIDGET_GUIDE = [
   "Pass everything below the line to visualize's show_widget unchanged, as widget_code, with title daybook_day_list " +
     'and loading_messages ["Opening the daybook"]. Call its read_me first if this session has not. Write nothing after the widget.',
   "",
-  'Each press in the widget sends its own message, like "Daybook: done <id>." Make the matching call and write ' +
-    "nothing, since the widget already marks the row as sent and a redraw after every press would stack widgets:",
+  'Each press in the widget sends its own message, like "Daybook: done <id>." Make the matching call, then call ' +
+    "daybook_widget again and draw the new page as the whole answer. When one message carries several presses, apply " +
+    "them in order and draw once. Pass later: true when the list he pressed on showed later:",
   "- done <id>: daybook_close {id}",
   '- drop <id>: daybook_close {id, status: "dropped"}',
   '- later <id>: daybook_move {id, horizon: "later"}',
   '- today <id>: daybook_move {id, horizon: "today"}',
-  "If a call fails, name it in one line, then call daybook_widget again and draw the new page.",
+  "If a call fails, name it in one line before the new page.",
   '"Daybook: show later." asks for a new draw with later: true.',
   "Today holds three. After a today press, read the open list with daybook_list {triggers: false}; if more than three " +
-    "sit on today, name them in one line and let Austen pick what comes off.",
+    "sit on today, name them in one line before the new page and let Austen pick what comes off.",
   "",
   "---",
 ].join("\n");

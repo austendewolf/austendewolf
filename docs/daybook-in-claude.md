@@ -6,7 +6,7 @@ controls, in the look the notebook sync settled into on 09/29/2026. The
 daybook, each its own way: the site's MCP Apps view in
 `apps/web/src/lib/mcp/views/daybook.ts`, a day-list widget each Claude Code
 session redraws by hand from a memory note, and the sync review in
-`plugins/daybook/skills/notebook/widget.html`.
+`plugins/daybook/skills/capture/widget.html`.
 
 This plan builds the rest of the plugin: a `day-list` skill, one drawing module
 that every surface loads, and a server tool that hands Claude the finished page.
