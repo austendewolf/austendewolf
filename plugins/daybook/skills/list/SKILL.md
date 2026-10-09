@@ -1,6 +1,6 @@
 ---
 name: list
-description: Draw Austen's Daybook day list in Claude Code and apply what he presses on it. Use whenever he mentions the daybook or his list in any form, including "let's talk about the daybook", "my list", "day list", "what's on today", "what's on my plate" and "show later", drawing it first and discussing after. Use it when he says "next" or "work the list". Use it also whenever a message arrives that starts "Daybook:" or "Daybook changes:", because those come from the widget this skill draws.
+description: Draw Austen's Daybook day list and apply what he presses on it, in Claude chat or Claude Code. Use whenever he mentions the daybook or his list in any form, including "let's talk about the daybook", "my list", "day list", "what's on today", "what's on my plate" and "show later", drawing it first and discussing after. Use it when he says "next" or "work the list". Use it also whenever a message arrives that starts "Daybook:" or "Daybook changes:", because those come from the widget this skill draws.
 ---
 
 # Day list
@@ -9,16 +9,22 @@ The Daybook's server builds the day list, and this skill carries it to the scree
 
 ## Drawing it
 
+The list has two views, and the live one comes first.
+
+**Live view, the default.** Call `daybook_show`, passing `later: true` only when he asks for later or the whole list. The server returns it as an MCP App view, and a host that renders those draws a card whose presses call `daybook_close` and `daybook_move` themselves. Each row updates in place, and no message reaches you. Write nothing after it.
+
+Use the live view first in every session, including a Claude Code session running inside the Claude app, because that host renders MCP App views too. Matching this skill does not mean the session is a terminal.
+
+**Message view, the fallback.** Switch to it for the rest of the session only when the live view did not draw: he says no card appeared, or the host says it cannot show the result as a view. A bare JSON result is not that signal, because the live view returns its data as JSON too.
+
 1. Call `daybook_widget`. Pass `later: true` only when he asks for later or the whole list, or when the message that asked for this draw said to show later.
 2. Load visualize's `read_me` once, if this session has not.
 3. Pass everything below the result's `---` line to `show_widget` unchanged, with the title and loading message the result names. Never write the page or edit it. The layout lives in `plugins/daybook/ui/daybook.js`, which the page loads, and a change to the look goes there.
 4. Write nothing after the widget. It is the whole answer, and a summary of it makes him read the list twice.
 
-Claude chat draws the site's own view of the list through `daybook_show`, where each press applies at once. Use that tool there, and this skill only in Claude Code.
-
 ## Applying what he presses
 
-The Code tab puts a press in his message box rather than sending it, and each press replaces what the box held. So every press writes one message carrying all the presses so far, the row reads "in message", and he sends it with return:
+Only the message view sends presses back to you, because its iframe cannot call tools. The Code tab puts a press in his message box rather than sending it, and each press replaces what the box held. So every press writes one message carrying all the presses so far, the row reads "in message", and he sends it with return:
 
     Daybook: done <id>; later <id>.
 
@@ -29,7 +35,7 @@ The Code tab puts a press in his message box rather than sending it, and each pr
 | `later <id>` | `daybook_move {id, horizon: "later"}` |
 | `today <id>` | `daybook_move {id, horizon: "today"}` |
 
-Make each call in the order given, then draw the list again once through Drawing it above, so the answer is the list as the store now holds it. Write nothing else. Pass `later: true` on that draw when the list he pressed on showed later.
+Make each call in the order given, then draw the list again once through the message view above, so the answer is the list as the store now holds it. Write nothing else. Pass `later: true` on that draw when the list he pressed on showed later.
 
 "Daybook: show later." draws the list again with `later: true`, and so does a message ending "Then show later." after its changes are applied.
 

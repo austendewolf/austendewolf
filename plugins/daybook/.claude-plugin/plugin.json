@@ -1,7 +1,7 @@
 {
   "name": "daybook",
-  "version": "0.5.3",
-  "description": "Turn a photographed page of handwritten notes into a daily list of actions, capped at three for today, and work that list from a widget in Claude Code.",
+  "version": "0.5.4",
+  "description": "Turn a photographed page of handwritten notes into a daily list of actions, capped at three for today, and work that list from a live widget in Claude chat or Claude Code.",
   "homepage": "https://github.com/austendewolf/austendewolf/tree/main/plugins/daybook",
   "repository": "https://github.com/austendewolf/austendewolf",
   "author": {
