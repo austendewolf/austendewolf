@@ -343,12 +343,13 @@ export const DAYBOOK_TOOLS: ToolDefinition[] = [
   {
     name: "daybook_show",
     description:
-      "Show Austen his day list in Claude chat, drawn as this server's view: today's items and later, " +
-      "with done, later, today and drop on each row. Call it first whenever he mentions the daybook or his " +
-      "list in any form, including \"let's talk about the daybook\", and discuss only after it is drawn. " +
-      "Claude Code draws nothing from this tool, so call " +
-      "daybook_widget there instead. Later shows as a count unless later is true; pass it only when he " +
-      "asks for later or the whole list. To read the list for your own reasoning, call daybook_list.",
+      "Show Austen his day list as this server's live view: today's items and later, with done, later, " +
+      "today and drop on the rows, and each press applies at once without a message. Call it first " +
+      "whenever he mentions the daybook or his list in any form, including \"let's talk about the " +
+      "daybook\", and discuss only after it is drawn. Use it in every session first, Claude Code inside " +
+      "the Claude app included. Fall back to daybook_widget only when he says no card appeared. Later " +
+      "shows as a count unless later is true; pass it only when he asks for later or the whole list. " +
+      "To read the list for your own reasoning, call daybook_list.",
     inputSchema: {
       type: "object",
       properties: {
@@ -361,10 +362,10 @@ export const DAYBOOK_TOOLS: ToolDefinition[] = [
   {
     name: "daybook_widget",
     description:
-      "Show Austen his day list in Claude Code. Returns a page to pass unchanged to visualize's show_widget, " +
-      "and says how to apply the message each press sends. Call it first whenever he mentions the daybook " +
-      "or his list in any form, including \"let's talk about the daybook\", and discuss only after it is " +
-      "drawn. Write nothing after the widget unless he asked a question. Claude chat uses daybook_show. " +
+      "Fallback for showing Austen his day list where daybook_show's live view does not draw. Returns a " +
+      "page to pass unchanged to visualize's show_widget, and says how to apply the message each press " +
+      "sends. Call daybook_show first; use this only after he says no card appeared, or to redraw after " +
+      "a \"Daybook:\" message from this widget. Write nothing after the widget unless he asked a question. " +
       "Later shows as a count unless later is true.",
     inputSchema: {
       type: "object",

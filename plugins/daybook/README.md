@@ -6,9 +6,12 @@ something you could start, checks it against the list you already have, and
 writes only what you approve. Your open Google Tasks come in with the page,
 including anything someone assigned you in a Doc or a Chat space.
 
-The `list` skill draws that list in Claude Code, with done, later, today
-and drop on each row. Presses collect in one message in your message box,
-you send it with return, and the skill applies them.
+The `list` skill draws that list with done, later, today and drop on its
+rows. Where the host renders MCP App views, as Claude chat does, it draws the
+server's live view through `daybook_show`, and each press applies at once.
+Elsewhere it falls back to a visualize widget, where presses collect in one
+message in your message box, you send it with return, and the skill applies
+them.
 
 ## Why it exists
 
@@ -38,8 +41,9 @@ Then send a photo of a page, say "sync my notebook", or ask for your list.
 
 The skills read and write through tools that your own MCP server provides:
 `daybook_list`, `daybook_find_trigger`, `daybook_upsert`, `daybook_close`,
-`daybook_move` and `daybook_set_day`, plus `daybook_widget`, which returns the
-day list as a page for the widget. This plugin ships no server, no endpoint and
+`daybook_move` and `daybook_set_day`, plus `daybook_show`, which returns the
+day list as an MCP App view, and `daybook_widget`, which returns it as a page
+for the fallback widget. This plugin ships no server, no endpoint and
 no credentials, so point those tool names at whatever store you keep. Mine
 lives on austendewolf.com behind its own authentication.
 
