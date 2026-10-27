@@ -637,6 +637,83 @@ export const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: "gmail_send",
+    description:
+      "Send a plain-text email as the account. Pass reply_to_message_id to reply inside that message's " +
+      "thread; the subject then defaults to 'Re: ' plus the original's. Sends immediately, so the person " +
+      "has to have approved the exact text and recipients first.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        account,
+        to: { type: "array", items: { type: "string" } },
+        cc: { type: "array", items: { type: "string" } },
+        bcc: { type: "array", items: { type: "string" } },
+        subject: { type: "string" },
+        body: { type: "string", description: "Plain text" },
+        reply_to_message_id: { type: "string", description: "Gmail message id being answered" },
+      },
+      required: ["account", "to", "body"],
+    },
+    run: async (a) => {
+      requireWrites("gmail_send");
+      const acct = String(a.account);
+      const list = (v: unknown) => ((v as string[] | undefined) ?? []).filter(Boolean);
+      const to = list(a.to);
+      if (!to.length) throw new Error("gmail_send needs at least one 'to' address.");
+
+      let subject = a.subject === undefined ? "" : String(a.subject);
+      let threadId: string | undefined;
+      const headers: string[] = [];
+      if (a.reply_to_message_id) {
+        const original = await api<GmailMessage>(
+          acct,
+          "GET",
+          `${GMAIL}/messages/${seg(String(a.reply_to_message_id))}`,
+          { params: { format: "metadata", metadataHeaders: ["Message-ID", "References", "Subject"] } },
+        );
+        threadId = original.threadId;
+        const h = pickHeaders(original, ["Message-ID", "Message-Id", "References", "Subject"]);
+        const messageId = h["message-id"];
+        if (messageId) {
+          headers.push(`In-Reply-To: ${messageId}`);
+          headers.push(`References: ${[h.references, messageId].filter(Boolean).join(" ")}`);
+        }
+        if (!subject) {
+          const prior = h.subject ?? "";
+          subject = /^re:/i.test(prior) ? prior : `Re: ${prior}`;
+        }
+      }
+
+      // RFC 2047 keeps a non-ASCII subject (an accented name, say) intact.
+      const encodedSubject = /^[\x20-\x7e]*$/.test(subject)
+        ? subject
+        : `=?UTF-8?B?${Buffer.from(subject, "utf8").toString("base64")}?=`;
+      const mime = [
+        `To: ${to.join(", ")}`,
+        ...(list(a.cc).length ? [`Cc: ${list(a.cc).join(", ")}`] : []),
+        ...(list(a.bcc).length ? [`Bcc: ${list(a.bcc).join(", ")}`] : []),
+        `Subject: ${encodedSubject}`,
+        ...headers,
+        "MIME-Version: 1.0",
+        "Content-Type: text/plain; charset=UTF-8",
+        "Content-Transfer-Encoding: base64",
+        "",
+        ...(Buffer.from(String(a.body).replace(/\r?\n/g, "\r\n"), "utf8")
+          .toString("base64")
+          .match(/.{1,76}/g) ?? []),
+      ].join("\r\n");
+
+      const sent = await api<{ id: string; threadId: string; labelIds?: string[] }>(
+        acct,
+        "POST",
+        `${GMAIL}/messages/send`,
+        { body: { raw: Buffer.from(mime, "utf8").toString("base64url"), threadId } },
+      );
+      return { id: sent.id, threadId: sent.threadId, labelIds: sent.labelIds ?? [] };
+    },
+  },
+  {
     name: "calendar_list_events",
     description: "List calendar events between two RFC3339 timestamps.",
     inputSchema: {
