@@ -1,0 +1,19 @@
+{
+  "name": "render-visual",
+  "version": "0.1.0",
+  "description": "Render a table, matrix, org chart or comparison grid from HTML to a trimmed PNG or a landscape PDF with headless Chrome.",
+  "homepage": "https://github.com/austendewolf/austendewolf/tree/main/plugins/render-visual",
+  "repository": "https://github.com/austendewolf/austendewolf",
+  "author": {
+    "name": "Austen DeWolf",
+    "url": "https://austendewolf.com"
+  },
+  "keywords": [
+    "render",
+    "png",
+    "pdf",
+    "table",
+    "chart",
+    "headless-chrome"
+  ]
+}
