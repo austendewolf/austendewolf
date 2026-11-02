@@ -1,0 +1,51 @@
+/* The midnight theme. Copy into the <style> block of any page you render. */
+:root {
+  --bg:    #0F0F16;  /* page background */
+  --panel: #14141C;  /* raised surface, cards */
+  --edge:  #2A2A36;  /* hairline rules */
+  --rule:  #3C3C49;  /* stronger divider between bands */
+  --ink:   #F2F0EC;  /* body text */
+  --white: #FFFFFF;  /* headings, emphasised names */
+  --muted: #8C8998;  /* row labels, captions, footnotes */
+  --open:  #FFB84D;  /* amber: funded requisition, highlighted cell */
+  --gap:   #FF7A66;  /* red: unstaffed, no requisition */
+  --na:    #5E5B6A;  /* not applicable by design */
+  --hit:   #2A2113;  /* amber cell background */
+}
+
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  padding: 34px 32px;
+  font: 14px/1.55 ui-sans-serif, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+
+h1  { font-size: 20px; margin: 0 0 3px; color: var(--white); letter-spacing: -0.2px; }
+.sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+h2  { font-size: 12px; margin: 18px 0 8px; letter-spacing: 1.2px;
+      text-transform: uppercase; color: var(--open); font-weight: 700; }
+
+table { border-collapse: collapse; }
+th, td { text-align: left; padding: 8px 14px; vertical-align: top;
+         border-bottom: 1px solid var(--edge); white-space: nowrap; }
+thead th { font-size: 11.5px; letter-spacing: .9px; text-transform: uppercase;
+           color: var(--white); border-bottom: 1px solid var(--rule); }
+tbody th { color: var(--muted); font-weight: 500; }
+
+.band td, .band th { border-top: 1px solid var(--rule); }
+.open { color: var(--open); }
+.gap  { color: var(--gap); }
+.na   { color: var(--na); }
+.num  { font-variant-numeric: tabular-nums; }
+.hit  { background: var(--hit); color: var(--open); text-align: center; letter-spacing: .4px; }
+.foot { margin-top: 18px; color: var(--muted); font-size: 12px; }
+
+/* Stacked list inside a table cell, e.g. a team roster under one column. */
+.stack td, .stack th { padding-top: 2px; padding-bottom: 2px; border-bottom: none; }
+.stack.first td, .stack.first th { padding-top: 10px; }
+.stack.last  td, .stack.last  th { padding-bottom: 10px; border-bottom: 1px solid var(--edge); }
+
+@page { size: Letter landscape; margin: 0; }
