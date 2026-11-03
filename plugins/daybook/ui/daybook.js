@@ -144,6 +144,8 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
 .db .m a,.db .foot a{color:var(--na);text-underline-offset:2px}
 .db .m a:hover,.db .foot a:hover{color:var(--green-shade)}
 .db .acts{display:flex;gap:6px}
+.db .acts .pill[data-a=drop]{--c:var(--na)}
+.db .acts .pill[data-a=later]{--c:var(--blue)}
 .db .acts .sent{font-family:var(--mono);font-size:11px;line-height:19px;color:var(--na)}
 .db .pill{--c:var(--muted);display:inline-block;box-sizing:border-box;padding:1px 11px;border:1px solid var(--c);border-radius:999px;background:transparent;color:var(--c);font-family:var(--mono);font-size:11px;line-height:17px;white-space:nowrap;text-align:center;transition:background 120ms ease,color 120ms ease}
 .db .pill.go{--c:var(--green-shade)}
@@ -519,8 +521,11 @@ position:relative;color:var(--ink);font-size:13px;line-height:1.5}
       const off = sent || !d.writable || !!busy[it.id];
       let acts;
       if (a) acts = '<span class="sent">' + (mode !== "message" ? "sent" : boxed && !held ? "in message" : "waiting") + "</span>";
-      else if (home === "today") acts = pill("later", "later", it.id, "Move to later: " + it.title, false, off) + pill("done", "done", it.id, "Done: " + it.title, true, off);
-      else acts = pill("drop", "drop", it.id, "Drop: " + it.title, false, off) + pill("done", "done", it.id, "Done: " + it.title, true, off);
+      else {
+        // Least kept to most finished, left to right: drop, later, done.
+        const later = home === "today" ? pill("later", "later", it.id, "Move to later: " + it.title, false, off) : "";
+        acts = pill("drop", "drop", it.id, "Drop: " + it.title, false, off) + later + pill("done", "done", it.id, "Done: " + it.title, true, off);
+      }
       const cls = "row li" + (a === "done" ? " struck" : "") + (a === "drop" ? " faded" : "") + (busy[it.id] ? " busy" : "");
       return (
         '<div class="' + cls + '" data-id="' + esc(it.id) + '">' +
