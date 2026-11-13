@@ -125,6 +125,8 @@ A line whose real content is a judgment still gets a physical verb: "decide whet
 
 The order that results: overdue, due today, someone waiting, due this week, quick, the rest, then anything untouched for a month. A wrong place means a wrong fact, so when he says an item sits too low, ask which fact is off rather than renumbering it. Leave `priority` alone; it only records his hand order inside a group.
 
+**Tag the person.** Any item or note about someone on his team gets their work email in `person`, whether or not they are waiting on him, and a `[Name]` on the page always does. That tag is the whole people record: `daybook_list` with `person` returns everything tagged with them, open and closed, so a later session can read back what he has noted. When a line concerns two people, tag the one the note is about, and name the other in the title.
+
 ## The shape of a note
 
 A note is one complete sentence. Its subject is whoever holds the idea, and its verb says how they hold it:
