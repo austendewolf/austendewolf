@@ -127,6 +127,8 @@ The order that results: overdue, due today, someone waiting, due this week, quic
 
 **Tag the person.** Any item or note about someone on his team gets their work email in `person`, whether or not they are waiting on him, and a `[Name]` on the page always does. That tag is the whole people record: `daybook_list` with `person` returns everything tagged with them, open and closed, so a later session can read back what he has noted. When a line concerns two people, tag the one the note is about, and name the other in the title.
 
+After tagging, call `daybook_people`. For each email in `unknown`, look the person up in Slack and write them through `daybook_people_upsert` with name, title and slack_id, plus the photo URL from the local people directory when one is on hand. The page shows that face on every item tagged with them.
+
 ## The shape of a note
 
 A note is one complete sentence. Its subject is whoever holds the idea, and its verb says how they hold it:
