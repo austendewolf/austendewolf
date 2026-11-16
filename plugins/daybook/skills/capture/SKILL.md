@@ -1,6 +1,6 @@
 ---
 name: capture
-description: Turn a photo of Austen's handwritten daily notebook page, and the Google Tasks people assign him in Docs and Chat, into Daybook items written as actions, enforce the three-item cap on today, and expire stale items. Use whenever he sends a picture of a notebook page, says "here's yesterday's page", "sync my notebook", "flush my notebook", "capture this page", "pull my Google Tasks", or asks to reconcile the written list with the digital one.
+description: Turn a photo of Austen's handwritten daily notebook page, the Google Tasks people assign him in Docs and Chat, his saved and unanswered Slack messages, his open Jira tickets and his Confluence tasks into Daybook items written as actions, enforce the three-item cap on today, and expire stale items. Use whenever he sends a picture of a notebook page, says "here's yesterday's page", "sync my notebook", "flush my notebook", "capture this page", "pull my Google Tasks", "pull my todos", "sweep Slack and Jira", or asks to reconcile the written list with the digital one.
 ---
 
 # Notebook intake
@@ -8,6 +8,8 @@ description: Turn a photo of Austen's handwritten daily notebook page, and the G
 Austen keeps one handwritten page per day and a digital Daybook. The paper is where he thinks. The Daybook is the only authoritative list. This skill moves items from the first to the second once a day and never the other way.
 
 Google Tasks is the second way in. Whatever someone assigns him in a Doc or a Chat space lands there, and every sync carries the open ones across with the page.
+
+Slack, Jira and Confluence are the other three, read under Reading the work surfaces below. A sync with no page reads all four sources alone.
 
 ## Why the rules below are shaped this way
 
@@ -52,10 +54,30 @@ Every sync reads his open Google Tasks on the work account alongside the page, a
 - Tasks records no created date. Date an undated task from the dated heading above it in the source Doc, and use the Doc's last edit when it has no headings.
 - The sync never completes or deletes a Google Task. Completing an assigned task ticks its box in the source Doc, where everyone reading the Doc sees it, so that happens only when he asks, through `tasks_complete`. Deleting one deletes the assignment in the Doc as well.
 
+## Reading the work surfaces
+
+Every sync also reads three work surfaces, each for what is his to do and nothing else. Each source keeps the Google Tasks rules: its object is a trigger, `daybook_find_trigger` runs on it before any judgment, an attached one gets no row, an empty one takes the three passes, and a source object that has closed closes the item it is attached to, as a Closing row with the source's date.
+
+The sync never writes back to any of them. It sends no Slack reply, moves no ticket and ticks no Confluence box, because each of those is visible to other people. They happen only when he asks.
+
+**Slack.** Read it through the Slack MCP, in the session, because no server credential for Slack survives a scheduled run.
+
+- Saved messages: search with `is:saved`, newest first. Every saved message is a candidate, because saving is how he marks something to come back to.
+- Asks waiting on him: search the last seven days for DMs to him and messages mentioning his user id, then read each thread. A message counts only when it asks him something or hands him something and no reply from him follows it. Announcements, FYIs and threads he already answered are not his to do.
+- The trigger is `surface: "slack"`, with the channel id and message ts joined as `<channel>:<ts>` for the external id and the permalink as its link.
+
+**Jira.** Read it through the REST API with the keychain `ATLASSIAN_API_TOKEN` and his Atlassian email, which needs no MCP login. Search with `/rest/api/3/search/jql`:
+
+    assignee = currentUser() AND statusCategory != Done AND status != Backlog AND issuetype not in (Initiative, Saga, Epic) AND updated >= -14d ORDER BY updated DESC
+
+Initiatives, sagas and epics are umbrellas he owns, and Backlog tickets are parked on purpose, so neither belongs on a day list. A ticket becomes an action about his part of it, such as "Triage HELP-1234 and assign it to the owning team", never the ticket summary copied across. The trigger is `surface: "jira"`, with the issue key as the external id and the browse URL as its link. A ticket that moved to Done closes its item.
+
+**Confluence.** Read inline tasks assigned to him through `/wiki/api/v2/tasks?assigned-to=<accountId>&status=incomplete`, taking his account id from `/rest/api/3/myself`. Only tasks created or due in the last 30 days are candidates. Count the older ones in a single line of the readout, because a task that has sat open on a page for a year was settled somewhere else and only the page owner can clear it. Read the page around each task for its context, and link the page. The trigger is `surface: "confluence"`, with the task id as the external id.
+
 ## The sync
 
 0. Read the whole Daybook first, with `daybook_list` (`all: true`, triggers on), and keep it in hand for the rest of the sync. Every line on the page gets judged against this list, and a stale read produces the duplicate rows this skill exists to prevent. Every match against it goes through `daybook_find_trigger` before judgment: it is cheaper and more reliable, so spend judgment only on what comes back empty.
-1. Read every mark on the page. A crossed line that matches an open item gets closed on the day of the page, because he did it and the list never caught up. Arrows stay open in `later`. Then read his Google Tasks, under the rules in Reading Google Tasks.
+1. Read every mark on the page. A crossed line that matches an open item gets closed on the day of the page, because he did it and the list never caught up. Arrows stay open in `later`. Then read his Google Tasks, under the rules in Reading Google Tasks, and the three work surfaces, under Reading the work surfaces.
 2. Consolidate like lines before refining any of them. Two lines about the same thing, whether on one page, across several uploaded pages, or on a page and in Google Tasks, become one item. The same person plus the same object is the usual sign, like "Robin role" and "one pager for Robin". Merge them, keep the most specific wording from each, and name the merge in step 5 so he can split it back.
 3. Take each dot, and each task the trigger check left unattached, through the same three passes, one line at a time, and in this order: pull context, refine the action, then reconcile it against the Daybook. Reconciling last matters, because a line matches an existing item on its refined shape (verb, object, person), and the raw page wording is too thin to match on. A notebook line is the thinnest version of the thing, and each surface holds a different missing piece:
 
@@ -86,7 +108,7 @@ Partial evidence resolves to Augments, with the source saying what moved, never 
 4. Write each surviving new dot as an action, to the shape below.
 5. Read the proposal back as a widget and let him confirm it line by line. Render it with the `visualize` MCP (`show_widget`) from `widget.html` in this skill's folder: read the file, replace `__PAGE_DATES__` with the page dates, like "09/28 and 09/29", and `__ROWS__` with the rows as a JavaScript array shaped as in Sync rows below, and pass the result through unchanged. Never write the layout fresh, because improvised layouts drifted from sync to sync and he could not read them. The layout lives in `plugins/daybook/ui/daybook.js`, the module the day list draws from too, and the template loads it at a git tag. When he asks for a layout change, change the module, tag the commit, and point the template at the new tag.
 
-   Group the rows by thread, one section per thread, each headed with a plain name for the work they share, like "Q4 roadmap" or "Hiring". Rows that share a person and an object, or that feed the same next step, belong in one thread. Lines with no thread go in a last section called "Other". A row from Google Tasks joins its thread like any page line, and its margin note names the Doc or space it was assigned in. Inside a thread, actions come first, then notes and decisions, then closings. A blocker needs no type of its own: it is a Heard note in the same thread as the action it gates, and that action's due date falls after it. Each kind of row shows the following:
+   Group the rows by thread, one section per thread, each headed with a plain name for the work they share, like "Q4 roadmap" or "Hiring". Rows that share a person and an object, or that feed the same next step, belong in one thread. Lines with no thread go in a last section called "Other". A row from Google Tasks joins its thread like any page line, and its margin note names the Doc or space it was assigned in. A row from Slack, Jira or Confluence does the same, and its margin note names the channel, the ticket or the page. Inside a thread, actions come first, then notes and decisions, then closings. A blocker needs no type of its own: it is a Heard note in the same thread as the action it gates, and that action's due date falls after it. Each kind of row shows the following:
    - **Actions**: each refined action with its pressure, size, cue and link. An Augments row shows the new title with the words it adds tinted, and the item's current title underneath, so he can see the edit before it lands. Every action carries its due date as data, and the widget spells it out in full with the distance in parentheses. A Duplicate row shows the page line and the item it folds into, with nothing to edit.
    - **Notes**: each lightning bolt, plus any line whose wording turned out to be a thought, written to the note shape below. A note lands in the Daybook as `kind: note` and a decision as `kind: decision`, so both stay searchable, and neither becomes a task. The widget marks new actions with a dot, matching the dot on the page, notes with a bolt and decisions with a gavel, both amber.
    - **Closing**: crosses, plus lines the resolution check found done, each with its evidence link. A Done row that also closes an open item names that item, because one Keep there closes two things.
@@ -94,7 +116,7 @@ Partial evidence resolves to Augments, with the source saying what moved, never 
    Clicking a row's icon opens a menu that changes its type, because the mark on the page is sometimes wrong. Retyping has to change the sentence, so write each row's other shapes up front in its `as` field: every note and decision carries a `new` version written to the action shape below, with its own pressure, size and due date, every action carries a `note` version as one plain sentence, and every Closing row that could still be open carries a `new` version. The widget swaps the matching version in when he retypes. A line with no honest action behind it, like a note about how he slept, gets no `new` version, and a retype flags it for rewording.
 
    Every row gets a square checkbox, checked by default. A green check means the line goes into the Daybook, and an empty box means it stays out. Mark merges on the row itself. One submit button sends the whole decision back through `sendPrompt`, with skipped ids and any rewording he typed into a row, as `Notebook sync confirmed for <dates>. Dropped: <ids>. Changed: <entries>. Keep everything else as proposed.` A changed entry reads `id: text` when he reworded it, and `id (note to new, waiting, quick, due 2026-10-05): text` when he retyped it. Nothing is written to the Daybook before that submit arrives. When he answers in text instead, take "skip 3, 7" or a reworded line the same way.
-6. Write only what he kept, each row as the type he left it on, in one `daybook_upsert` batch: new actions, notes and decisions as new items, Augments as edits carrying `updated_at`, Duplicates as a trigger on the existing item, and closures through `daybook_close` on the evidence date. Every item carries a trigger for where it came from: `notebook` for a page line, `tasks` with the account and task id for a Google Task, and both when the two merged. Skipped lines get no row at all, because a skipped line means no. A skipped Augments leaves the existing item exactly as it was.
+6. Write only what he kept, each row as the type he left it on, in one `daybook_upsert` batch: new actions, notes and decisions as new items, Augments as edits carrying `updated_at`, Duplicates as a trigger on the existing item, and closures through `daybook_close` on the evidence date. Every item carries a trigger for where it came from: `notebook` for a page line, `tasks` with the account and task id for a Google Task, `slack`, `jira` or `confluence` for the work surfaces, and every one that applies when sources merged. Skipped lines get no row at all, because a skipped line means no. A skipped Augments leaves the existing item exactly as it was.
 7. Draw the day list with Later open, through the `list` skill, and ask him to pick today's three on it. Claude never picks them.
 8. Tell him the page is synced. He can recycle it.
 
